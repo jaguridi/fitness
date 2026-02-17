@@ -69,12 +69,9 @@ export default function UserCard({ status }) {
           </span>
         </span>
         <div className="flex items-center gap-2">
-          {user.hasShield && (
-            <span className="text-cyan-400 font-semibold">🛡️ Escudo</span>
-          )}
-          {!user.hasShield && (user.consecutiveSuccesses || 0) > 0 && (
-            <span className="text-gray-500 font-semibold">
-              🔥 {user.consecutiveSuccesses}/4
+          {(user.consecutiveSuccesses || 0) > 0 && (
+            <span className={`font-semibold ${user.hasShield ? 'text-cyan-400' : 'text-orange-400'}`}>
+              🔥 {user.consecutiveSuccesses} {user.hasShield && '🛡️'}
             </span>
           )}
           {canEarnLife && (

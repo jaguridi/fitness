@@ -66,14 +66,11 @@ export default function UserDetail({ gameState }) {
             {'🤍'.repeat(Math.max(0, 3 - (user.extraLives || 0)))}
           </span>
         </div>
-        {user.hasShield && (
-          <div className="mt-1 text-sm text-cyan-400 font-semibold">
-            🛡️ Escudo activo — próxima multa se reduce a la mitad
-          </div>
-        )}
-        {!user.hasShield && (user.consecutiveSuccesses || 0) > 0 && (
-          <div className="mt-1 text-sm text-gray-500">
-            🔥 Racha: {user.consecutiveSuccesses}/4 semanas para escudo
+        {(user.consecutiveSuccesses || 0) > 0 && (
+          <div className={`mt-1 text-sm font-semibold ${user.hasShield ? 'text-cyan-400' : 'text-orange-400'}`}>
+            🔥 Racha: {user.consecutiveSuccesses} semanas
+            {user.hasShield && ' — 🛡️ Escudo activo (próxima multa -50%)'}
+            {!user.hasShield && (user.consecutiveSuccesses || 0) < 4 && ` (${4 - user.consecutiveSuccesses} más para escudo)`}
           </div>
         )}
         <div className="mt-2 text-sm text-gray-400">
