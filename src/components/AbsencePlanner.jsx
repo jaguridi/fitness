@@ -3,6 +3,7 @@ import { USERS, WEEKLY_GOAL } from '../constants'
 import { addAbsence } from '../services/firebaseService'
 import { getWeekId, getAdjacentWeeks, formatWeekLabel, getWeekRange } from '../hooks/useWeekId'
 import { addWeeks, format } from 'date-fns'
+import Avatar from './Avatar'
 
 export default function AbsencePlanner({ onSuccess }) {
   const [userId, setUserId] = useState('')
@@ -92,7 +93,7 @@ export default function AbsencePlanner({ onSuccess }) {
                     : 'bg-gray-700 hover:bg-gray-600'
                 }`}
               >
-                <div className="text-2xl">{u.avatar}</div>
+                <Avatar src={u.avatar} name={u.name} size="sm" />
                 <div className="text-xs mt-1 text-gray-300 truncate">{u.name}</div>
               </button>
             ))}

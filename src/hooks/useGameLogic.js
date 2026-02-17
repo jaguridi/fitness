@@ -61,6 +61,8 @@ export default function useGameLogic() {
               extraLives: 0,
               currentFineLevel: BASE_FINE,
               consecutiveMisses: 0,
+              consecutiveSuccesses: 0,
+              hasShield: false,
             })
           }
         }
@@ -211,8 +213,12 @@ export default function useGameLogic() {
         let fineApplied = 0
         let lifeUsed = false
         let lifeEarned = false
+        let shieldEarned = false
+        let shieldBroken = false
         let newLives = user.extraLives || 0
         let consecutiveMisses = user.consecutiveMisses || 0
+        let consecutiveSuccesses = user.consecutiveSuccesses || 0
+        let hasShield = user.hasShield || false
         let currentFineLevel = user.currentFineLevel || BASE_FINE
 
         const deficit = totalRequired - sessions
@@ -221,6 +227,14 @@ export default function useGameLogic() {
           // Goal met! Reduce fine level
           currentFineLevel = Math.max(BASE_FINE, Math.floor(currentFineLevel / 2))
           consecutiveMisses = 0
+          consecutiveSuccesses += 1
+
+          // Check for shield: 4 consecutive successful weeks (only if no shield yet)
+          if (consecutiveSuccesses >= 4 && !hasShield) {
+            hasShield = true
+            shieldEarned = true
+            // Don't reset consecutiveSuccesses — shield stays until broken
+          }
 
           // Check for extra life (only regular sessions count, not recovery)
           const regularPlusBonus = sessions - recoverySessions
@@ -234,10 +248,27 @@ export default function useGameLogic() {
           newLives -= 1
           currentFineLevel = Math.max(BASE_FINE, Math.floor(currentFineLevel / 2))
           consecutiveMisses = 0
+          consecutiveSuccesses += 1
+
+          // Life used counts as success for shield streak
+          if (consecutiveSuccesses >= 4 && !hasShield) {
+            hasShield = true
+            shieldEarned = true
+          }
         } else {
           // Missed! Apply fine
-          fineApplied = currentFineLevel
+          let baseFine = currentFineLevel
+
+          // Shield: pay half, shield breaks
+          if (hasShield) {
+            baseFine = Math.floor(baseFine / 2)
+            hasShield = false
+            shieldBroken = true
+          }
+
+          fineApplied = baseFine
           consecutiveMisses += 1
+          consecutiveSuccesses = 0
           currentFineLevel = Math.min(MAX_FINE, currentFineLevel * 2)
         }
 
@@ -247,6 +278,8 @@ export default function useGameLogic() {
           walletBalance: (user.walletBalance || 0) + fineApplied,
           currentFineLevel,
           consecutiveMisses,
+          consecutiveSuccesses,
+          hasShield,
         })
 
         // Save weekly summary
@@ -258,6 +291,8 @@ export default function useGameLogic() {
           fineApplied,
           lifeUsed,
           lifeEarned,
+          shieldEarned,
+          shieldBroken,
           deficit: Math.max(0, deficit),
         })
       }

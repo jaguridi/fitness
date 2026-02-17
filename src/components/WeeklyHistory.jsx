@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { USERS, formatCLP } from '../constants'
 import { getUserSummaries, getWorkoutsByUser } from '../services/firebaseService'
 import { formatWeekLabel } from '../hooks/useWeekId'
+import Avatar from './Avatar'
 
 export default function WeeklyHistory() {
   const [selectedUser, setSelectedUser] = useState(USERS[0].id)
@@ -52,7 +53,7 @@ export default function WeeklyHistory() {
                 : 'bg-gray-700 hover:bg-gray-600'
             }`}
           >
-            <div className="text-xl">{u.avatar}</div>
+            <Avatar src={u.avatar} name={u.name} size="sm" />
             <div className="text-xs mt-1 text-gray-300 truncate">{u.name}</div>
           </button>
         ))}
@@ -79,6 +80,8 @@ export default function WeeklyHistory() {
                     {s.sessions} sesiones
                     {s.lifeUsed && ' | ❤️ Vida usada'}
                     {s.lifeEarned && ' | 🌟 Vida ganada'}
+                    {s.shieldEarned && ' | 🛡️ Escudo ganado'}
+                    {s.shieldBroken && ' | 💔 Escudo roto'}
                   </p>
                 </div>
                 <div className="text-right">

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { USERS } from '../constants'
 import { useAuth } from '../context/AuthContext'
+import Avatar from '../components/Avatar'
 
 export default function Login() {
   const { login, checkUserPin } = useAuth()
@@ -81,7 +82,7 @@ export default function Login() {
                   onClick={() => handleSelectUser(u)}
                   className="bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-indigo-500 rounded-2xl p-4 text-center transition-all active:scale-95"
                 >
-                  <div className="text-4xl mb-2">{u.avatar}</div>
+                  <div className="mb-2"><Avatar src={u.avatar} name={u.name} size="lg" /></div>
                   <div className="text-white font-semibold">{u.name}</div>
                 </button>
               ))}
@@ -100,7 +101,7 @@ export default function Login() {
             <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
               {/* User avatar */}
               <div className="text-center mb-4">
-                <div className="text-5xl mb-2">{selectedUser.avatar}</div>
+                <div className="mb-2 flex justify-center"><Avatar src={selectedUser.avatar} name={selectedUser.name} size="xl" /></div>
                 <h2 className="text-xl font-bold text-white">{selectedUser.name}</h2>
               </div>
 

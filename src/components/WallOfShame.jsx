@@ -1,4 +1,5 @@
 import { formatCLP } from '../constants'
+import Avatar from './Avatar'
 
 export default function WallOfShame({ users }) {
   const usersWithFines = users
@@ -27,7 +28,7 @@ export default function WallOfShame({ users }) {
             className="flex items-center justify-between bg-gray-900/50 rounded-xl px-3 py-2"
           >
             <div className="flex items-center gap-2">
-              <span className="text-2xl">{user.avatar || '🏃'}</span>
+              <Avatar src={user.avatar} name={user.name} size="sm" hasShield={user.hasShield} />
               <span className="font-medium text-white">{user.name}</span>
             </div>
             <span className="text-red-400 font-bold font-mono">

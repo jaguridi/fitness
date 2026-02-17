@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { USERS, formatCLP } from '../constants'
 import { getWorkoutsByUser } from '../services/firebaseService'
+import Avatar from '../components/Avatar'
 
 export default function UserDetail({ gameState }) {
   const { userId } = useParams()
@@ -57,7 +58,7 @@ export default function UserDetail({ gameState }) {
 
       {/* User header */}
       <div className="bg-gray-800 rounded-2xl p-4 border border-gray-700 text-center">
-        <div className="text-5xl mb-2">{user.avatar}</div>
+        <div className="mb-2 flex justify-center"><Avatar src={user.avatar} name={user.name} size="xl" hasShield={user.hasShield} /></div>
         <h2 className="text-2xl font-black text-white">{user.name}</h2>
         <div className="flex justify-center gap-4 mt-2 text-sm">
           <span>
@@ -65,6 +66,16 @@ export default function UserDetail({ gameState }) {
             {'🤍'.repeat(Math.max(0, 3 - (user.extraLives || 0)))}
           </span>
         </div>
+        {user.hasShield && (
+          <div className="mt-1 text-sm text-cyan-400 font-semibold">
+            🛡️ Escudo activo — próxima multa se reduce a la mitad
+          </div>
+        )}
+        {!user.hasShield && (user.consecutiveSuccesses || 0) > 0 && (
+          <div className="mt-1 text-sm text-gray-500">
+            🔥 Racha: {user.consecutiveSuccesses}/4 semanas para escudo
+          </div>
+        )}
         <div className="mt-2 text-sm text-gray-400">
           Multa acumulada:{' '}
           <span className="text-red-400 font-bold">

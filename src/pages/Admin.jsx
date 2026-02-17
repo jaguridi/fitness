@@ -2,6 +2,7 @@ import AbsencePlanner from '../components/AbsencePlanner'
 import WeeklyHistory from '../components/WeeklyHistory'
 import WeekEndProcessor from '../components/WeekEndProcessor'
 import { useAuth } from '../context/AuthContext'
+import Avatar from '../components/Avatar'
 
 export default function Admin({ gameState }) {
   const { processWeekEnd, currentWeekId } = gameState
@@ -14,7 +15,7 @@ export default function Admin({ gameState }) {
       {/* Current user info */}
       <div className="bg-gray-800 rounded-2xl p-4 border border-gray-700 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="text-2xl">{currentUser?.avatar}</div>
+          <Avatar src={currentUser?.avatar} name={currentUser?.name} size="md" />
           <div>
             <p className="font-semibold text-white">{currentUser?.name}</p>
             <p className="text-xs text-gray-400">Sesión activa</p>

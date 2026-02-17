@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { USERS } from '../constants'
 import { subscribeAllWorkouts } from '../services/firebaseService'
+import Avatar from '../components/Avatar'
 
 export default function Feed() {
   const [workouts, setWorkouts] = useState([])
@@ -70,7 +71,7 @@ export default function Feed() {
               >
                 {/* Post header */}
                 <div className="flex items-center gap-3 p-3">
-                  <div className="text-2xl">{user.avatar}</div>
+                  <Avatar src={user.avatar} name={user.name} size="sm" />
                   <div className="flex-1">
                     <p className="font-semibold text-white text-sm">{user.name}</p>
                     <p className="text-gray-500 text-xs">{formatTimeAgo(w.createdAt)}</p>

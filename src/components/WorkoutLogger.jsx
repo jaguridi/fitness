@@ -4,6 +4,7 @@ import { EXERCISE_TYPES } from '../constants'
 import { addWorkout, uploadWorkoutPhoto } from '../services/firebaseService'
 import { getWeekId } from '../hooks/useWeekId'
 import { useAuth } from '../context/AuthContext'
+import Avatar from './Avatar'
 
 export default function WorkoutLogger({ onClose, onSuccess }) {
   const { currentUser } = useAuth()
@@ -79,7 +80,7 @@ export default function WorkoutLogger({ onClose, onSuccess }) {
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           {/* Logged-in user indicator */}
           <div className="flex items-center gap-3 bg-gray-700/50 rounded-xl p-3">
-            <div className="text-3xl">{currentUser?.avatar}</div>
+            <Avatar src={currentUser?.avatar} name={currentUser?.name} size="md" />
             <div>
               <p className="font-semibold text-white">{currentUser?.name}</p>
               <p className="text-xs text-gray-400">Registrando como {currentUser?.name}</p>

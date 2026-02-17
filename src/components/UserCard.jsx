@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { formatCLP } from '../constants'
+import Avatar from './Avatar'
 
 export default function UserCard({ status }) {
   const navigate = useNavigate()
@@ -18,7 +19,7 @@ export default function UserCard({ status }) {
     >
       {/* Header */}
       <div className="flex items-center gap-3 mb-3">
-        <div className="text-4xl">{user.avatar || '🏃'}</div>
+        <Avatar src={user.avatar} name={user.name} size="md" hasShield={user.hasShield} />
         <div className="flex-1">
           <h3 className="font-bold text-lg text-white">{user.name}</h3>
           <div className="text-sm">
@@ -67,9 +68,19 @@ export default function UserCard({ status }) {
             {formatCLP(user.walletBalance || 0)}
           </span>
         </span>
-        {canEarnLife && (
-          <span className="text-yellow-400 font-semibold">🌟 +1 vida si sigue así</span>
-        )}
+        <div className="flex items-center gap-2">
+          {user.hasShield && (
+            <span className="text-cyan-400 font-semibold">🛡️ Escudo</span>
+          )}
+          {!user.hasShield && (user.consecutiveSuccesses || 0) > 0 && (
+            <span className="text-gray-500 font-semibold">
+              🔥 {user.consecutiveSuccesses}/4
+            </span>
+          )}
+          {canEarnLife && (
+            <span className="text-yellow-400 font-semibold">🌟 +1 vida</span>
+          )}
+        </div>
       </div>
     </div>
   )
