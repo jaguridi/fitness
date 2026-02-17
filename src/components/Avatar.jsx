@@ -12,10 +12,10 @@ const BASE_PATH = import.meta.env.BASE_URL || '/'
  */
 export default function Avatar({ src, name = '', size = 'md', hasShield = false }) {
   const sizes = {
-    sm: { container: 'w-8 h-8', text: 'text-2xl', img: 'w-8 h-8', shield: 'text-xs -bottom-1 -right-1' },
-    md: { container: 'w-12 h-12', text: 'text-4xl', img: 'w-12 h-12', shield: 'text-sm -bottom-1 -right-1' },
-    lg: { container: 'w-16 h-16', text: 'text-5xl', img: 'w-16 h-16', shield: 'text-base -bottom-1 -right-1' },
-    xl: { container: 'w-20 h-20', text: 'text-6xl', img: 'w-20 h-20', shield: 'text-lg -bottom-1 -right-1' },
+    sm: { container: 'w-8 h-8', text: 'text-2xl', img: 'h-10', shield: 'text-xs -bottom-1 -right-1' },
+    md: { container: 'w-12 h-12', text: 'text-4xl', img: 'h-14', shield: 'text-sm -bottom-1 -right-1' },
+    lg: { container: 'w-16 h-16', text: 'text-5xl', img: 'h-20', shield: 'text-base -bottom-1 -right-1' },
+    xl: { container: 'w-20 h-20', text: 'text-6xl', img: 'h-24', shield: 'text-lg -bottom-1 -right-1' },
   }
 
   const s = sizes[size] || sizes.md
@@ -28,11 +28,11 @@ export default function Avatar({ src, name = '', size = 'md', hasShield = false 
   if (isImage) {
     const fullPath = `${BASE_PATH}${src.startsWith('/') ? src.slice(1) : src}`
     return (
-      <div className={`relative ${s.container} flex-shrink-0`}>
+      <div className={`relative ${s.container} flex items-center justify-center flex-shrink-0 overflow-visible`}>
         <img
           src={fullPath}
           alt={name}
-          className={`${s.img} object-contain`}
+          className={`${s.img} w-auto object-contain`}
         />
         {shieldBadge}
       </div>
