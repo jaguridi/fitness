@@ -50,10 +50,11 @@ export default function useGameLogic() {
       }, 15000)
 
       try {
-        // Ensure all 4 users exist in Firestore
+        // Ensure all 4 users exist in Firestore and sync name/avatar
         const existing = await getUsers()
         for (const u of USERS) {
-          if (!existing.find((e) => e.id === u.id)) {
+          const found = existing.find((e) => e.id === u.id)
+          if (!found) {
             await setUser(u.id, {
               name: u.name,
               avatar: u.avatar,
@@ -64,6 +65,9 @@ export default function useGameLogic() {
               consecutiveSuccesses: 0,
               hasShield: false,
             })
+          } else if (found.name !== u.name || found.avatar !== u.avatar) {
+            // Always sync name/avatar from constants
+            await setUser(u.id, { name: u.name, avatar: u.avatar })
           }
         }
 

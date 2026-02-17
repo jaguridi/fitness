@@ -23,6 +23,13 @@ export default function WeeklyHistory() {
         setWorkouts(wks)
         setLoading(false)
       }
+    }).catch((err) => {
+      console.error('WeeklyHistory load error:', err)
+      if (!cancelled) {
+        setSummaries([])
+        setWorkouts([])
+        setLoading(false)
+      }
     })
 
     return () => { cancelled = true }

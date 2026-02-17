@@ -32,7 +32,7 @@ export default function Avatar({ src, name = '', size = 'md', hasShield = false 
         <img
           src={fullPath}
           alt={name}
-          className={`${s.img} rounded-full object-cover`}
+          className={`${s.img} object-contain`}
         />
         {shieldBadge}
       </div>

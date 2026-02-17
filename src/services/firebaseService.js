@@ -65,11 +65,12 @@ export async function getWorkoutsForWeek(weekId) {
 export async function getWorkoutsByUser(userId) {
   const q = query(
     workoutsCol(),
-    where('userId', '==', userId),
-    orderBy('date', 'desc')
+    where('userId', '==', userId)
   )
   const snap = await getDocs(q)
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
 }
 
 export function subscribeWorkoutsForWeek(weekId, callback, onError) {
@@ -111,11 +112,12 @@ export async function getAllSummariesForWeek(weekId) {
 export async function getUserSummaries(userId) {
   const q = query(
     weeklySummariesCol(),
-    where('userId', '==', userId),
-    orderBy('weekId', 'desc')
+    where('userId', '==', userId)
   )
   const snap = await getDocs(q)
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.weekId || '').localeCompare(a.weekId || ''))
 }
 
 export function subscribeWeeklySummaries(weekId, callback) {
