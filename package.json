@@ -1,0 +1,31 @@
+{
+  "name": "family-fitness-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && npx gh-pages -d dist"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "Family Fitness Tracker - Gamified workout accountability app",
+  "dependencies": {
+    "date-fns": "^4.1.0",
+    "firebase": "^12.9.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.13.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.18",
+    "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "^10.4.24",
+    "gh-pages": "^6.3.0",
+    "tailwindcss": "^4.1.18",
+    "vite": "^5.4.21"
+  }
+}
