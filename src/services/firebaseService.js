@@ -183,6 +183,13 @@ export async function getJustification(userId, weekId) {
   return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() }
 }
 
+export async function updateJustification(justificationId, data) {
+  await updateDoc(doc(db, 'justifications', justificationId), {
+    ...data,
+    updatedAt: serverTimestamp(),
+  })
+}
+
 export async function getJustificationsForWeek(weekId) {
   const q = query(justificationsCol(), where('weekId', '==', weekId))
   const snap = await getDocs(q)

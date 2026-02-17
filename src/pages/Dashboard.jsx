@@ -13,7 +13,7 @@ export default function Dashboard({ gameState }) {
   const { currentUser } = useAuth()
   const [showLogger, setShowLogger] = useState(false)
   const [showJustification, setShowJustification] = useState(false)
-  const [hasJustification, setHasJustification] = useState(false)
+  const [existingJustification, setExistingJustification] = useState(null) // null = no justification, object = existing
 
   const {
     users,
@@ -28,10 +28,19 @@ export default function Dashboard({ gameState }) {
   useEffect(() => {
     if (currentUser?.id && currentWeekId) {
       getJustification(currentUser.id, currentWeekId).then((j) => {
-        setHasJustification(!!j)
+        setExistingJustification(j) // null if none, object if exists
       }).catch(() => {})
     }
   }, [currentUser?.id, currentWeekId])
+
+  // Refresh justification after modal closes
+  const refreshJustification = () => {
+    if (currentUser?.id && currentWeekId) {
+      getJustification(currentUser.id, currentWeekId).then((j) => {
+        setExistingJustification(j)
+      }).catch(() => {})
+    }
+  }
 
   if (loading) {
     return (
@@ -84,10 +93,13 @@ export default function Dashboard({ gameState }) {
         ))}
       </div>
 
-      {/* Justification banner — shows if current user hasn't met goal and hasn't submitted */}
+      {/* Justification banner */}
       {currentUser && (() => {
         const myStatus = getUserWeekStatus(currentUser.id)
-        if (myStatus && !myStatus.goalMet && !myStatus.frozen && !hasJustification) {
+        if (!myStatus || myStatus.goalMet || myStatus.frozen) return null
+
+        // No justification yet → offer to create one
+        if (!existingJustification) {
           return (
             <button
               onClick={() => setShowJustification(true)}
@@ -105,14 +117,36 @@ export default function Dashboard({ gameState }) {
             </button>
           )
         }
-        if (myStatus && !myStatus.goalMet && !myStatus.frozen && hasJustification) {
+
+        // Has justification that was REJECTED → offer to appeal
+        if (!existingJustification.aiVerdict) {
           return (
-            <div className="bg-amber-900/10 border border-amber-700/20 rounded-2xl p-3 text-center">
-              <p className="text-amber-400 text-sm">⚖️ Ya enviaste tu justificación para esta semana</p>
-            </div>
+            <button
+              onClick={() => setShowJustification(true)}
+              className="w-full bg-red-900/20 border border-red-700/30 rounded-2xl p-4 text-left hover:bg-red-900/30 transition-all active:scale-[0.98]"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">❌</span>
+                <div>
+                  <p className="font-semibold text-red-300">Justificación rechazada</p>
+                  <p className="text-xs text-red-400/70">
+                    Puedes editar y apelar tu justificación
+                  </p>
+                </div>
+              </div>
+              <div className="mt-2 bg-red-900/30 rounded-xl p-2">
+                <p className="text-xs text-red-300 truncate">🤖 {existingJustification.aiReason}</p>
+              </div>
+            </button>
           )
         }
-        return null
+
+        // Has justification that was ACCEPTED → show confirmation
+        return (
+          <div className="bg-green-900/10 border border-green-700/20 rounded-2xl p-3 text-center">
+            <p className="text-green-400 text-sm">✅ Justificación aceptada — multa congelada esta semana</p>
+          </div>
+        )
       })()}
 
       {/* Wall of shame */}
@@ -139,9 +173,13 @@ export default function Dashboard({ gameState }) {
       {showJustification && (
         <JustificationModal
           weekId={currentWeekId}
-          onClose={() => setShowJustification(false)}
+          existing={existingJustification?.aiVerdict === false ? existingJustification : null}
+          onClose={() => {
+            setShowJustification(false)
+            refreshJustification()
+          }}
           onResult={(verdict) => {
-            setHasJustification(true)
+            refreshJustification()
           }}
         />
       )}

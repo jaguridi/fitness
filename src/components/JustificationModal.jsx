@@ -1,33 +1,46 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { addJustification, uploadJustificationPhoto } from '../services/firebaseService'
+import { addJustification, updateJustification, uploadJustificationPhoto } from '../services/firebaseService'
 import { evaluateExcuse } from '../services/aiJudge'
 import Avatar from './Avatar'
+import { compressImageWithPreview } from '../utils/compressImage'
 
 /**
- * Modal for submitting a justification when a user misses the weekly goal.
- * Allows text + optional photo evidence. AI evaluates the excuse.
+ * Modal for submitting or editing/appealing a justification.
+ *
+ * Modes:
+ * - New: no `existing` prop → create a new justification
+ * - Appeal: `existing` prop with a rejected justification → edit and re-submit
  *
  * @param {string} weekId - The week being justified
+ * @param {object|null} existing - Existing justification to edit/appeal (null for new)
  * @param {function} onClose - Close the modal
  * @param {function} onResult - Callback with the verdict {valid, reason}
  */
-export default function JustificationModal({ weekId, onClose, onResult }) {
+export default function JustificationModal({ weekId, existing = null, onClose, onResult }) {
   const { currentUser } = useAuth()
-  const [excuse, setExcuse] = useState('')
+  const isAppeal = !!existing
+  const [excuse, setExcuse] = useState(existing?.excuse || '')
   const [photo, setPhoto] = useState(null)
-  const [photoPreview, setPhotoPreview] = useState(null)
+  const [photoPreview, setPhotoPreview] = useState(existing?.evidencePhotoURL || null)
   const [submitting, setSubmitting] = useState(false)
   const [verdict, setVerdict] = useState(null)
   const [error, setError] = useState('')
 
-  const handlePhotoChange = (e) => {
+  const handlePhotoChange = async (e) => {
     const file = e.target.files[0]
     if (file) {
-      setPhoto(file)
-      const reader = new FileReader()
-      reader.onloadend = () => setPhotoPreview(reader.result)
-      reader.readAsDataURL(file)
+      try {
+        const { file: compressed, preview } = await compressImageWithPreview(file)
+        setPhoto(compressed)
+        setPhotoPreview(preview)
+      } catch {
+        // Fallback: use original file
+        setPhoto(file)
+        const reader = new FileReader()
+        reader.onloadend = () => setPhotoPreview(reader.result)
+        reader.readAsDataURL(file)
+      }
     }
   }
 
@@ -51,21 +64,33 @@ export default function JustificationModal({ weekId, onClose, onResult }) {
       const aiResult = await evaluateExcuse(excuse.trim(), photoPreview)
       setVerdict(aiResult)
 
-      // 2. Upload evidence photo to Storage (if provided)
-      let evidencePhotoURL = null
+      // 2. Upload evidence photo to Storage (if new photo provided)
+      let evidencePhotoURL = existing?.evidencePhotoURL || null
       if (photo) {
         evidencePhotoURL = await uploadJustificationPhoto(photo, currentUser.id, weekId)
       }
 
-      // 3. Save justification to Firestore
-      await addJustification({
-        userId: currentUser.id,
-        weekId,
-        excuse: excuse.trim(),
-        evidencePhotoURL,
-        aiVerdict: aiResult.valid,
-        aiReason: aiResult.reason,
-      })
+      if (isAppeal && existing.id) {
+        // 3a. Update existing justification (appeal)
+        await updateJustification(existing.id, {
+          excuse: excuse.trim(),
+          evidencePhotoURL,
+          aiVerdict: aiResult.valid,
+          aiReason: aiResult.reason,
+          appealCount: (existing.appealCount || 0) + 1,
+        })
+      } else {
+        // 3b. Save new justification to Firestore
+        await addJustification({
+          userId: currentUser.id,
+          weekId,
+          excuse: excuse.trim(),
+          evidencePhotoURL,
+          aiVerdict: aiResult.valid,
+          aiReason: aiResult.reason,
+          appealCount: 0,
+        })
+      }
 
       // 4. Notify parent
       onResult?.(aiResult)
@@ -77,12 +102,19 @@ export default function JustificationModal({ weekId, onClose, onResult }) {
     }
   }
 
+  const handleAppealAgain = () => {
+    // Reset verdict so user can edit and re-submit
+    setVerdict(null)
+  }
+
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
       <div className="bg-gray-800 w-full max-w-lg rounded-t-3xl sm:rounded-2xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-700">
-          <h2 className="text-xl font-bold text-white">⚖️ Justificación</h2>
+          <h2 className="text-xl font-bold text-white">
+            {isAppeal ? '✏️ Editar y Apelar' : '⚖️ Justificación'}
+          </h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-white text-2xl leading-none"
@@ -98,19 +130,32 @@ export default function JustificationModal({ weekId, onClose, onResult }) {
             <div>
               <p className="font-semibold text-white">{currentUser?.name}</p>
               <p className="text-xs text-gray-400">
-                No cumpliste la meta esta semana. ¿Tienes una justificación?
+                {isAppeal
+                  ? 'Edita tu justificación y envía la apelación al Juez IA.'
+                  : 'No cumpliste la meta esta semana. ¿Tienes una justificación?'}
               </p>
             </div>
           </div>
 
           {/* Info banner */}
           <div className="bg-amber-900/20 border border-amber-700/30 rounded-xl p-3 text-sm text-amber-300">
-            <p className="font-semibold mb-1">⚠️ Solo para imprevistos</p>
+            <p className="font-semibold mb-1">
+              {isAppeal ? '📝 Apelación' : '⚠️ Solo para imprevistos'}
+            </p>
             <p className="text-amber-400 text-xs">
-              Enfermedad súbita, lesión, emergencia. Si era previsible (viaje, vacaciones),
-              usa la semana congelada. Adjunta evidencia (certificado médico, foto) para mayor probabilidad de aprobación.
+              {isAppeal
+                ? 'Corrige tu justificación, agrega más detalles o mejor evidencia. La IA volverá a evaluar.'
+                : 'Enfermedad súbita, lesión, emergencia. Si era previsible (viaje, vacaciones), usa la semana congelada. Adjunta evidencia (certificado médico, foto) para mayor probabilidad de aprobación.'}
             </p>
           </div>
+
+          {/* Previous verdict (only on appeal) */}
+          {isAppeal && existing.aiReason && !verdict && (
+            <div className="bg-red-900/20 border border-red-700/30 rounded-xl p-3">
+              <p className="text-xs text-red-400 font-semibold mb-1">Respuesta anterior del Juez IA:</p>
+              <p className="text-sm text-red-300">❌ {existing.aiReason}</p>
+            </div>
+          )}
 
           {!verdict ? (
             /* Submit form */
@@ -118,7 +163,7 @@ export default function JustificationModal({ weekId, onClose, onResult }) {
               {/* Excuse text */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">
-                  ¿Qué pasó? Sé específico.
+                  {isAppeal ? '¿Qué pasó? Edita tu justificación.' : '¿Qué pasó? Sé específico.'}
                 </label>
                 <textarea
                   value={excuse}
@@ -137,7 +182,6 @@ export default function JustificationModal({ weekId, onClose, onResult }) {
                 <input
                   type="file"
                   accept="image/*"
-                  capture="environment"
                   onChange={handlePhotoChange}
                   className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-indigo-600 file:text-white file:font-semibold hover:file:bg-indigo-500 file:cursor-pointer"
                 />
@@ -162,7 +206,7 @@ export default function JustificationModal({ weekId, onClose, onResult }) {
                   onClick={onClose}
                   className="flex-1 py-3 rounded-xl font-bold text-gray-400 bg-gray-700 hover:bg-gray-600 transition-all"
                 >
-                  Acepto la multa
+                  {isAppeal ? 'Cancelar' : 'Acepto la multa'}
                 </button>
                 <button
                   type="submit"
@@ -173,7 +217,11 @@ export default function JustificationModal({ weekId, onClose, onResult }) {
                       : 'bg-indigo-600 hover:bg-indigo-500 text-white active:scale-95'
                   }`}
                 >
-                  {submitting ? '🤖 Evaluando...' : '⚖️ Enviar al Juez IA'}
+                  {submitting
+                    ? '🤖 Evaluando...'
+                    : isAppeal
+                    ? '⚖️ Enviar Apelación'
+                    : '⚖️ Enviar al Juez IA'}
                 </button>
               </div>
             </form>
@@ -221,12 +269,23 @@ export default function JustificationModal({ weekId, onClose, onResult }) {
                 )}
               </div>
 
-              <button
-                onClick={onClose}
-                className="w-full py-3 rounded-xl font-bold bg-gray-700 hover:bg-gray-600 text-white transition-all"
-              >
-                Cerrar
-              </button>
+              {/* Action buttons */}
+              <div className="flex gap-3">
+                {!verdict.valid && (
+                  <button
+                    onClick={handleAppealAgain}
+                    className="flex-1 py-3 rounded-xl font-bold bg-amber-600 hover:bg-amber-500 text-white transition-all active:scale-95"
+                  >
+                    ✏️ Editar y Apelar
+                  </button>
+                )}
+                <button
+                  onClick={onClose}
+                  className={`${!verdict.valid ? 'flex-1' : 'w-full'} py-3 rounded-xl font-bold bg-gray-700 hover:bg-gray-600 text-white transition-all`}
+                >
+                  Cerrar
+                </button>
+              </div>
             </div>
           )}
         </div>

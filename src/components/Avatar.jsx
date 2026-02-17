@@ -5,6 +5,9 @@ const BASE_PATH = import.meta.env.BASE_URL || '/'
  * If `src` starts with '/' it's treated as an image path, otherwise as emoji text.
  * Optionally shows a shield overlay when the user has an active shield.
  *
+ * For image avatars, the container is invisible — only the image shows,
+ * with no visible box or background.
+ *
  * @param {string} src - Image path (e.g. '/avatars/jose.png') or emoji (e.g. '🏃‍♂️')
  * @param {string} name - Alt text for the image
  * @param {string} size - Tailwind size: 'sm' (32px), 'md' (48px), 'lg' (64px), 'xl' (80px)
@@ -28,7 +31,7 @@ export default function Avatar({ src, name = '', size = 'md', hasShield = false 
   if (isImage) {
     const fullPath = `${BASE_PATH}${src.startsWith('/') ? src.slice(1) : src}`
     return (
-      <div className={`relative ${s.container} flex items-center justify-center flex-shrink-0 overflow-visible`}>
+      <div className="relative inline-flex items-center justify-center flex-shrink-0">
         <img
           src={fullPath}
           alt={name}
