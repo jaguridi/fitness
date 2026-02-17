@@ -1,12 +1,14 @@
 import { useState } from 'react'
-import { USERS, WEEKLY_GOAL } from '../constants'
+import { WEEKLY_GOAL } from '../constants'
 import { addAbsence } from '../services/firebaseService'
 import { getWeekId, getAdjacentWeeks, formatWeekLabel, getWeekRange } from '../hooks/useWeekId'
 import { addWeeks, format } from 'date-fns'
 import Avatar from './Avatar'
+import { useAuth } from '../context/AuthContext'
 
 export default function AbsencePlanner({ onSuccess }) {
-  const [userId, setUserId] = useState('')
+  const { currentUser } = useAuth()
+  const userId = currentUser?.id || ''
   const [absenceDate, setAbsenceDate] = useState('')
   const [recoveryWeeks, setRecoveryWeeks] = useState([])
   const [submitting, setSubmitting] = useState(false)
@@ -36,7 +38,7 @@ export default function AbsencePlanner({ onSuccess }) {
     setSuccess(false)
 
     if (!userId || !frozenWeekId || recoveryWeeks.length === 0) {
-      setError('Selecciona usuario, semana de ausencia y al menos una semana de recuperación.')
+      setError('Selecciona la semana de ausencia y al menos una semana de recuperación.')
       return
     }
 
@@ -61,7 +63,6 @@ export default function AbsencePlanner({ onSuccess }) {
       })
 
       setSuccess(true)
-      setUserId('')
       setAbsenceDate('')
       setRecoveryWeeks([])
       onSuccess?.()
@@ -78,25 +79,12 @@ export default function AbsencePlanner({ onSuccess }) {
       <h3 className="text-lg font-bold text-white mb-4">✈️ Planificar Ausencia</h3>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* User selection */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Usuario</label>
-          <div className="grid grid-cols-4 gap-2">
-            {USERS.map((u) => (
-              <button
-                type="button"
-                key={u.id}
-                onClick={() => setUserId(u.id)}
-                className={`p-2 rounded-xl text-center transition-all ${
-                  userId === u.id
-                    ? 'bg-indigo-600 ring-2 ring-indigo-400'
-                    : 'bg-gray-700 hover:bg-gray-600'
-                }`}
-              >
-                <Avatar src={u.avatar} name={u.name} size="sm" />
-                <div className="text-xs mt-1 text-gray-300 truncate">{u.name}</div>
-              </button>
-            ))}
+        {/* Logged-in user indicator */}
+        <div className="flex items-center gap-3 bg-gray-700/50 rounded-xl p-3">
+          <Avatar src={currentUser?.avatar} name={currentUser?.name} size="md" />
+          <div>
+            <p className="font-semibold text-white">{currentUser?.name}</p>
+            <p className="text-xs text-gray-400">Planificando ausencia para {currentUser?.name}</p>
           </div>
         </div>
 
