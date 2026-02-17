@@ -1,9 +1,9 @@
 // The 4 family members
 export const USERS = [
-  { id: 'user1', name: 'Usuario 1', avatar: '🏋️' },
-  { id: 'user2', name: 'Usuario 2', avatar: '🧘' },
-  { id: 'user3', name: 'Usuario 3', avatar: '🏃' },
-  { id: 'user4', name: 'Usuario 4', avatar: '🚴' },
+  { id: 'user1', name: 'Jose', avatar: '🏋️‍♂️' },
+  { id: 'user2', name: 'Javi', avatar: '🧘‍♀️' },
+  { id: 'user3', name: 'Gonza', avatar: '🏃‍♂️' },
+  { id: 'user4', name: 'Fran', avatar: '🚴‍♀️' },
 ]
 
 // Game rules
