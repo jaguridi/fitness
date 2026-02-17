@@ -15,6 +15,7 @@ export default function Dashboard({ gameState }) {
     currentWeekId,
     getUserWeekStatus,
     loading,
+    error,
   } = gameState
 
   if (loading) {
@@ -23,6 +24,24 @@ export default function Dashboard({ gameState }) {
         <div className="text-center">
           <div className="text-4xl mb-2 animate-bounce">💪</div>
           <p className="text-gray-400">Cargando...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center max-w-sm">
+          <div className="text-4xl mb-2">⚠️</div>
+          <p className="text-red-400 font-semibold mb-2">Error de conexión</p>
+          <p className="text-gray-400 text-sm mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl font-medium"
+          >
+            Reintentar
+          </button>
         </div>
       </div>
     )

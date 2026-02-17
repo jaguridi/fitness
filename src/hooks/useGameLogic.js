@@ -30,6 +30,7 @@ export default function useGameLogic() {
   const [summaries, setSummaries] = useState([])
   const [absences, setAbsences] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [totalPot, setTotalPot] = useState(0)
 
   const currentWeekId = getWeekId()
@@ -40,37 +41,46 @@ export default function useGameLogic() {
 
     async function init() {
       setLoading(true)
+      setError(null)
 
-      // Ensure all 4 users exist in Firestore
-      const existing = await getUsers()
-      for (const u of USERS) {
-        if (!existing.find((e) => e.id === u.id)) {
-          await setUser(u.id, {
-            name: u.name,
-            avatar: u.avatar,
-            walletBalance: 0,
-            extraLives: 0,
-            currentFineLevel: BASE_FINE,
-            consecutiveMisses: 0,
-          })
+      try {
+        // Ensure all 4 users exist in Firestore
+        const existing = await getUsers()
+        for (const u of USERS) {
+          if (!existing.find((e) => e.id === u.id)) {
+            await setUser(u.id, {
+              name: u.name,
+              avatar: u.avatar,
+              walletBalance: 0,
+              extraLives: 0,
+              currentFineLevel: BASE_FINE,
+              consecutiveMisses: 0,
+            })
+          }
         }
+
+        // Load absences
+        const abs = await getAllAbsences()
+        setAbsences(abs)
+
+        // Subscribe to real-time updates (with error handlers)
+        unsubUsers = subscribeUsers(
+          (data) => setUsersState(data),
+        )
+        unsubWorkouts = subscribeWorkoutsForWeek(
+          currentWeekId,
+          (data) => setWorkouts(data),
+        )
+
+        // Load current week summaries
+        const sums = await getAllSummariesForWeek(currentWeekId)
+        setSummaries(sums)
+      } catch (err) {
+        console.error('Error initializing game data:', err)
+        setError(err.message || 'Error conectando con la base de datos')
+      } finally {
+        setLoading(false)
       }
-
-      // Load absences
-      const abs = await getAllAbsences()
-      setAbsences(abs)
-
-      // Subscribe to real-time updates
-      unsubUsers = subscribeUsers((data) => setUsersState(data))
-      unsubWorkouts = subscribeWorkoutsForWeek(currentWeekId, (data) =>
-        setWorkouts(data)
-      )
-
-      // Load current week summaries
-      const sums = await getAllSummariesForWeek(currentWeekId)
-      setSummaries(sums)
-
-      setLoading(false)
     }
 
     init()
@@ -251,6 +261,7 @@ export default function useGameLogic() {
     summaries,
     absences,
     loading,
+    error,
     totalPot,
     currentWeekId,
     getSessionCount,
