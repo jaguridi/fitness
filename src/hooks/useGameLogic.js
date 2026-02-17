@@ -37,11 +37,17 @@ export default function useGameLogic() {
 
   // ── Load & subscribe data ──────────────────────────────────
   useEffect(() => {
-    let unsubUsers, unsubWorkouts
+    let unsubUsers, unsubWorkouts, timeoutId
 
     async function init() {
       setLoading(true)
       setError(null)
+
+      // Safety timeout: if init takes > 15s, stop loading and show error
+      timeoutId = setTimeout(() => {
+        setLoading(false)
+        setError('Tiempo de espera agotado. Revisa tu conexión o la configuración de Firebase.')
+      }, 15000)
 
       try {
         // Ensure all 4 users exist in Firestore
@@ -66,10 +72,12 @@ export default function useGameLogic() {
         // Subscribe to real-time updates (with error handlers)
         unsubUsers = subscribeUsers(
           (data) => setUsersState(data),
+          (err) => console.error('Users subscription error:', err),
         )
         unsubWorkouts = subscribeWorkoutsForWeek(
           currentWeekId,
           (data) => setWorkouts(data),
+          (err) => console.error('Workouts subscription error:', err),
         )
 
         // Load current week summaries
@@ -79,6 +87,7 @@ export default function useGameLogic() {
         console.error('Error initializing game data:', err)
         setError(err.message || 'Error conectando con la base de datos')
       } finally {
+        clearTimeout(timeoutId)
         setLoading(false)
       }
     }
@@ -86,6 +95,7 @@ export default function useGameLogic() {
     init()
 
     return () => {
+      clearTimeout(timeoutId)
       unsubUsers?.()
       unsubWorkouts?.()
     }

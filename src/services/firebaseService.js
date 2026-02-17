@@ -36,10 +36,15 @@ export async function setUser(userId, data) {
   await setDoc(doc(db, 'users', userId), data, { merge: true })
 }
 
-export function subscribeUsers(callback) {
-  return onSnapshot(usersCol(), (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-  })
+export function subscribeUsers(callback, onError) {
+  return onSnapshot(
+    usersCol(),
+    (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    (err) => {
+      console.error('subscribeUsers error:', err)
+      onError?.(err)
+    }
+  )
 }
 
 // ── Workouts ─────────────────────────────────────────────────
@@ -66,11 +71,16 @@ export async function getWorkoutsByUser(userId) {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
 }
 
-export function subscribeWorkoutsForWeek(weekId, callback) {
+export function subscribeWorkoutsForWeek(weekId, callback, onError) {
   const q = query(workoutsCol(), where('weekId', '==', weekId))
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-  })
+  return onSnapshot(
+    q,
+    (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    (err) => {
+      console.error('subscribeWorkoutsForWeek error:', err)
+      onError?.(err)
+    }
+  )
 }
 
 // ── Weekly Summaries ─────────────────────────────────────────
