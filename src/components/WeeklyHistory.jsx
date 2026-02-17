@@ -40,6 +40,7 @@ export default function WeeklyHistory() {
       case 'completed': return { text: 'Cumplida', color: 'text-green-400' }
       case 'missed': return { text: 'Multada', color: 'text-red-400' }
       case 'frozen': return { text: 'Congelada', color: 'text-blue-400' }
+      case 'justified': return { text: '⚖️ Justificada', color: 'text-amber-400' }
       default: return { text: status, color: 'text-gray-400' }
     }
   }

@@ -6,6 +6,7 @@ import {
   MAX_FINE,
   EXTRA_LIFE_THRESHOLD,
   MAX_LIVES_PER_WEEK,
+  getAvatarForMood,
 } from '../constants'
 import {
   getUsers,
@@ -17,6 +18,7 @@ import {
   getAllAbsences,
   subscribeUsers,
   subscribeWorkoutsForWeek,
+  getJustificationsForWeek,
 } from '../services/firebaseService'
 import { getWeekId, getPreviousWeekId } from './useWeekId'
 
@@ -150,8 +152,13 @@ export default function useGameLogic() {
   // ── Calculate user status for the current week ─────────────
   const getUserWeekStatus = useCallback(
     (userId) => {
-      const user = users.find((u) => u.id === userId)
-      if (!user) return null
+      const userFirestore = users.find((u) => u.id === userId)
+      if (!userFirestore) return null
+
+      // Compute mood-based avatar
+      const userConst = USERS.find((u) => u.id === userId)
+      const moodAvatar = getAvatarForMood(userConst, userFirestore)
+      const user = { ...userFirestore, avatar: moodAvatar }
 
       const sessions = getSessionCount(userId)
       const recoverySessions = getRecoverySessions(userId)
@@ -181,6 +188,7 @@ export default function useGameLogic() {
   const processWeekEnd = useCallback(
     async (weekId = currentWeekId) => {
       const weekWorkouts = await getWorkoutsForWeek(weekId)
+      const weekJustifications = await getJustificationsForWeek(weekId)
       const prevWeekId = getPreviousWeekId(weekId)
 
       for (const u of USERS) {
@@ -260,20 +268,32 @@ export default function useGameLogic() {
             shieldEarned = true
           }
         } else {
-          // Missed! Apply fine
-          let baseFine = currentFineLevel
+          // Check if user has an accepted justification for this week
+          const justification = weekJustifications.find(
+            (j) => j.userId === u.id && j.aiVerdict === true
+          )
 
-          // Shield: pay half, shield breaks
-          if (hasShield) {
-            baseFine = Math.floor(baseFine / 2)
-            hasShield = false
-            shieldBroken = true
+          if (justification) {
+            // Justified: freeze — no fine, but doesn't count as success
+            // Fine level stays the same, streak resets
+            consecutiveSuccesses = 0
+            // Don't increase consecutiveMisses — it's justified
+          } else {
+            // Missed without valid justification! Apply fine
+            let baseFine = currentFineLevel
+
+            // Shield: pay half, shield breaks
+            if (hasShield) {
+              baseFine = Math.floor(baseFine / 2)
+              hasShield = false
+              shieldBroken = true
+            }
+
+            fineApplied = baseFine
+            consecutiveMisses += 1
+            consecutiveSuccesses = 0
+            currentFineLevel = Math.min(MAX_FINE, currentFineLevel * 2)
           }
-
-          fineApplied = baseFine
-          consecutiveMisses += 1
-          consecutiveSuccesses = 0
-          currentFineLevel = Math.min(MAX_FINE, currentFineLevel * 2)
         }
 
         // Update user profile
@@ -286,9 +306,17 @@ export default function useGameLogic() {
           hasShield,
         })
 
+        // Determine status
+        const justifiedThisWeek = weekJustifications.find(
+          (j) => j.userId === u.id && j.aiVerdict === true
+        )
+        let weekStatus = 'completed'
+        if (fineApplied > 0) weekStatus = 'missed'
+        else if (justifiedThisWeek && deficit > 0) weekStatus = 'justified'
+
         // Save weekly summary
         await setWeeklySummary(u.id, weekId, {
-          status: fineApplied > 0 ? 'missed' : 'completed',
+          status: weekStatus,
           sessions,
           totalRequired,
           recoverySessions,
@@ -304,8 +332,14 @@ export default function useGameLogic() {
     [users, absences, currentWeekId]
   )
 
+  // Compute mood-based avatars for all users
+  const usersWithMood = users.map((u) => {
+    const userConst = USERS.find((c) => c.id === u.id)
+    return { ...u, avatar: getAvatarForMood(userConst, u) }
+  })
+
   return {
-    users,
+    users: usersWithMood,
     workouts,
     summaries,
     absences,

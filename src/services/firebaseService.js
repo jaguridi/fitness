@@ -163,6 +163,58 @@ export function subscribeAllWorkouts(callback, onError, maxItems = 50) {
   )
 }
 
+// ── Justifications ────────────────────────────────────────────
+const justificationsCol = () => collection(db, 'justifications')
+
+export async function addJustification(justification) {
+  return addDoc(justificationsCol(), {
+    ...justification,
+    createdAt: serverTimestamp(),
+  })
+}
+
+export async function getJustification(userId, weekId) {
+  const q = query(
+    justificationsCol(),
+    where('userId', '==', userId),
+    where('weekId', '==', weekId)
+  )
+  const snap = await getDocs(q)
+  return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() }
+}
+
+export async function getJustificationsForWeek(weekId) {
+  const q = query(justificationsCol(), where('weekId', '==', weekId))
+  const snap = await getDocs(q)
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
+export async function getAllJustifications() {
+  const snap = await getDocs(justificationsCol())
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
+export function subscribeJustifications(callback, onError) {
+  const q = query(justificationsCol(), orderBy('createdAt', 'desc'), limit(20))
+  return onSnapshot(
+    q,
+    (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    (err) => {
+      console.error('subscribeJustifications error:', err)
+      onError?.(err)
+    }
+  )
+}
+
+export async function uploadJustificationPhoto(file, userId, weekId) {
+  const timestamp = Date.now()
+  const ext = file.name.split('.').pop()
+  const path = `justifications/${userId}/${weekId}_${timestamp}.${ext}`
+  const storageRef = ref(storage, path)
+  const snapshot = await uploadBytes(storageRef, file)
+  return getDownloadURL(snapshot.ref)
+}
+
 // ── Photo Upload ─────────────────────────────────────────────
 export async function uploadWorkoutPhoto(file, userId, date) {
   const timestamp = Date.now()
