@@ -9,6 +9,7 @@ import {
   query,
   where,
   orderBy,
+  limit,
   onSnapshot,
   serverTimestamp,
 } from 'firebase/firestore'
@@ -145,6 +146,19 @@ export async function getAllAbsences() {
 
 export async function updateAbsence(absenceId, data) {
   await updateDoc(doc(db, 'absences', absenceId), data)
+}
+
+// ── All Workouts (Feed) ──────────────────────────────────────
+export function subscribeAllWorkouts(callback, onError, maxItems = 50) {
+  const q = query(workoutsCol(), orderBy('createdAt', 'desc'), limit(maxItems))
+  return onSnapshot(
+    q,
+    (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    (err) => {
+      console.error('subscribeAllWorkouts error:', err)
+      onError?.(err)
+    }
+  )
 }
 
 // ── Photo Upload ─────────────────────────────────────────────

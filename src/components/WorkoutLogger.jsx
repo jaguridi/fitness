@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
-import { USERS, EXERCISE_TYPES } from '../constants'
+import { EXERCISE_TYPES } from '../constants'
 import { addWorkout, uploadWorkoutPhoto } from '../services/firebaseService'
 import { getWeekId } from '../hooks/useWeekId'
+import { useAuth } from '../context/AuthContext'
 
 export default function WorkoutLogger({ onClose, onSuccess }) {
-  const [userId, setUserId] = useState('')
+  const { currentUser } = useAuth()
+  const userId = currentUser?.id || ''
+
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [exerciseType, setExerciseType] = useState('')
   const [duration, setDuration] = useState('')
@@ -74,27 +77,12 @@ export default function WorkoutLogger({ onClose, onSuccess }) {
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          {/* User selection */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              ¿Quién eres?
-            </label>
-            <div className="grid grid-cols-4 gap-2">
-              {USERS.map((u) => (
-                <button
-                  type="button"
-                  key={u.id}
-                  onClick={() => setUserId(u.id)}
-                  className={`p-2 rounded-xl text-center transition-all ${
-                    userId === u.id
-                      ? 'bg-indigo-600 ring-2 ring-indigo-400'
-                      : 'bg-gray-700 hover:bg-gray-600'
-                  }`}
-                >
-                  <div className="text-2xl">{u.avatar}</div>
-                  <div className="text-xs mt-1 text-gray-300 truncate">{u.name}</div>
-                </button>
-              ))}
+          {/* Logged-in user indicator */}
+          <div className="flex items-center gap-3 bg-gray-700/50 rounded-xl p-3">
+            <div className="text-3xl">{currentUser?.avatar}</div>
+            <div>
+              <p className="font-semibold text-white">{currentUser?.name}</p>
+              <p className="text-xs text-gray-400">Registrando como {currentUser?.name}</p>
             </div>
           </div>
 

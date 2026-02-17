@@ -1,15 +1,21 @@
+import { useNavigate } from 'react-router-dom'
 import { formatCLP } from '../constants'
 
 export default function UserCard({ status }) {
+  const navigate = useNavigate()
+
   if (!status) return null
-  const { user, sessions, totalRequired, frozen, goalMet, progress, canEarnLife } = status
+  const { userId, user, sessions, totalRequired, frozen, goalMet, progress, canEarnLife } = status
 
   const progressPct = Math.round(progress * 100)
   const hearts = '❤️'.repeat(user.extraLives || 0)
   const emptyHearts = '🤍'.repeat(Math.max(0, 3 - (user.extraLives || 0)))
 
   return (
-    <div className="bg-gray-800 rounded-2xl p-4 shadow-lg border border-gray-700">
+    <div
+      onClick={() => navigate(`/user/${userId}`)}
+      className="bg-gray-800 rounded-2xl p-4 shadow-lg border border-gray-700 cursor-pointer hover:border-indigo-500/50 transition-all active:scale-[0.98]"
+    >
       {/* Header */}
       <div className="flex items-center gap-3 mb-3">
         <div className="text-4xl">{user.avatar || '🏃'}</div>
