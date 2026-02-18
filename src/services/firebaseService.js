@@ -6,6 +6,7 @@ import {
   setDoc,
   addDoc,
   updateDoc,
+  deleteDoc,
   query,
   where,
   orderBy,
@@ -21,6 +22,7 @@ const usersCol = () => collection(db, 'users')
 const workoutsCol = () => collection(db, 'workouts')
 const weeklySummariesCol = () => collection(db, 'weekly_summaries')
 const absencesCol = () => collection(db, 'absences')
+const flaggedWorkoutsCol = () => collection(db, 'flagged_workouts')
 
 // ── Users ────────────────────────────────────────────────────
 export async function getUsers() {
@@ -220,6 +222,61 @@ export async function uploadJustificationPhoto(file, userId, weekId) {
   const storageRef = ref(storage, path)
   const snapshot = await uploadBytes(storageRef, file)
   return getDownloadURL(snapshot.ref)
+}
+
+// ── Flagged Workouts (Flag & Vote) ───────────────────────────
+
+/** Flag a workout for review. Doc ID = workoutId to prevent duplicates. */
+export async function flagWorkout(workoutId, flaggedBy, workoutOwnerId) {
+  const docRef = doc(db, 'flagged_workouts', workoutId)
+  const existing = await getDoc(docRef)
+  if (existing.exists()) {
+    throw new Error('Este ejercicio ya fue reportado.')
+  }
+  await setDoc(docRef, {
+    workoutId,
+    flaggedBy,
+    workoutOwnerId,
+    status: 'pending',
+    votes: { [flaggedBy]: 'fake' },
+    createdAt: serverTimestamp(),
+    resolvedAt: null,
+  })
+}
+
+/** Cast a vote on a flagged workout. */
+export async function voteOnFlag(workoutId, voterId, vote) {
+  const docRef = doc(db, 'flagged_workouts', workoutId)
+  await updateDoc(docRef, {
+    [`votes.${voterId}`]: vote,
+  })
+}
+
+/** Resolve a flag: set status + resolvedAt. */
+export async function resolveFlag(workoutId, resolution) {
+  const docRef = doc(db, 'flagged_workouts', workoutId)
+  await updateDoc(docRef, {
+    status: resolution,
+    resolvedAt: serverTimestamp(),
+  })
+}
+
+/** Delete a workout document (used when vote resolves to fake). */
+export async function deleteWorkout(workoutId) {
+  await deleteDoc(doc(db, 'workouts', workoutId))
+}
+
+/** Real-time subscription to all pending flags. */
+export function subscribeFlaggedWorkouts(callback, onError) {
+  const q = query(flaggedWorkoutsCol(), where('status', '==', 'pending'))
+  return onSnapshot(
+    q,
+    (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    (err) => {
+      console.error('subscribeFlaggedWorkouts error:', err)
+      onError?.(err)
+    }
+  )
 }
 
 // ── Photo Upload ─────────────────────────────────────────────

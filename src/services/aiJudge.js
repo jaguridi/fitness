@@ -6,7 +6,7 @@
  * Foreseeable absences should use the "Planned Absence" feature instead.
  */
 
-const GEMINI_API_KEY = 'AIzaSyDvcCDTWe4yr1PodLoADXs5LJ0RqytAMhw'
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || ''
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`
 
 const SYSTEM_PROMPT = `Eres el juez estricto pero justo del reto fitness familiar "FitFamily".
@@ -45,11 +45,10 @@ Si adjunta una imagen, evalúala como evidencia.`
  * @returns {Promise<{valid: boolean, reason: string}>}
  */
 export async function evaluateExcuse(excuse, photoBase64 = null) {
-  if (GEMINI_API_KEY === '__GEMINI_API_KEY__') {
-    // Fallback for when API key is not set — return a placeholder
+  if (!GEMINI_API_KEY) {
     return {
       valid: false,
-      reason: 'Sistema de IA no configurado. Configura la API key de Gemini.',
+      reason: 'Sistema de IA no configurado. Configura VITE_GEMINI_API_KEY en .env.',
     }
   }
 
