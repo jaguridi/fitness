@@ -1,16 +1,26 @@
+import { useEffect } from 'react'
 import { Routes, Route, NavLink } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import useGameLogic from './hooks/useGameLogic'
+import { registerPushToken } from './services/notificationService'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Feed from './pages/Feed'
 import UserDetail from './pages/UserDetail'
 import Admin from './pages/Admin'
 import Rules from './pages/Rules'
+import Stats from './pages/Stats'
 
 function AppContent() {
-  const { isLoggedIn, loading: authLoading } = useAuth()
+  const { isLoggedIn, loading: authLoading, currentUser } = useAuth()
   const gameState = useGameLogic()
+
+  // Register push token 3s after login (gives user time to settle on the dashboard)
+  useEffect(() => {
+    if (!isLoggedIn || !currentUser) return
+    const t = setTimeout(() => registerPushToken(currentUser.id), 3000)
+    return () => clearTimeout(t)
+  }, [isLoggedIn, currentUser?.id])
 
   if (authLoading) {
     return (
@@ -34,6 +44,7 @@ function AppContent() {
           <Route path="/user/:userId" element={<UserDetail gameState={gameState} />} />
           <Route path="/admin" element={<Admin gameState={gameState} />} />
           <Route path="/rules" element={<Rules />} />
+          <Route path="/stats" element={<Stats gameState={gameState} />} />
         </Routes>
       </main>
 
@@ -61,6 +72,17 @@ function AppContent() {
           >
             <div className="text-xl">📸</div>
             <div>Feed</div>
+          </NavLink>
+          <NavLink
+            to="/stats"
+            className={({ isActive }) =>
+              `flex-1 py-3 text-center text-sm font-medium transition-colors ${
+                isActive ? 'text-indigo-400' : 'text-gray-500 hover:text-gray-300'
+              }`
+            }
+          >
+            <div className="text-xl">📊</div>
+            <div>Stats</div>
           </NavLink>
           <NavLink
             to="/rules"

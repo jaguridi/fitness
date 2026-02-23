@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app'
 import { getFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
+import { getMessaging, isSupported } from 'firebase/messaging'
 
 const firebaseConfig = {
   apiKey: "AIzaSyDDQ8mE8kDssOBeai82HGWtvmC_b1t92kI",
@@ -14,4 +15,10 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig)
 export const db = getFirestore(app)
 export const storage = getStorage(app)
+
+// Messaging is only available in browsers that support it (not Node/SSR)
+export const messagingPromise = isSupported().then((ok) =>
+  ok ? getMessaging(app) : null
+)
+
 export default app

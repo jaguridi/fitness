@@ -132,6 +132,12 @@ async function main() {
     console.log(`   ${userId}: reset`)
   }
 
+  // 7. Set auto-processing lock so the app doesn't re-apply fines for W08
+  console.log('7. Setting auto-processing lock...')
+  const prevWeek = '2026-W08'
+  await setDoc(doc(db, 'settings', 'meta'), { lastAutoProcessedWeekId: prevWeek }, { merge: true })
+  console.log(`   settings/meta: lastAutoProcessedWeekId = ${prevWeek}`)
+
   console.log('\n✅  Cleanup complete! The app is ready for week 2026-W09.\n')
   process.exit(0)
 }
