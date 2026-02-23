@@ -1,0 +1,25 @@
+{
+  "name": "FitFamily - Tracker de Ejercicio",
+  "short_name": "FitFamily",
+  "description": "Reto fitness familiar con multas, vidas y escudos",
+  "start_url": "/fitness/",
+  "scope": "/fitness/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#030712",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "/fitness/avatars/jose.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/fitness/avatars/jose.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
