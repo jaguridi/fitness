@@ -1,8 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Routes, Route, NavLink } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import useGameLogic from './hooks/useGameLogic'
 import { registerPushToken } from './services/notificationService'
+import OnboardingModal, { shouldShowOnboarding } from './components/OnboardingModal'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Feed from './pages/Feed'
@@ -14,13 +15,21 @@ import Stats from './pages/Stats'
 function AppContent() {
   const { isLoggedIn, loading: authLoading, currentUser } = useAuth()
   const gameState = useGameLogic()
+  const [showOnboarding, setShowOnboarding] = useState(false)
 
-  // Register push token 3s after login (gives user time to settle on the dashboard)
+  // Show onboarding once per device after first login
   useEffect(() => {
-    if (!isLoggedIn || !currentUser) return
+    if (isLoggedIn && currentUser && shouldShowOnboarding()) {
+      setShowOnboarding(true)
+    }
+  }, [isLoggedIn, currentUser?.id])
+
+  // If onboarding was skipped/done, still register push token silently
+  useEffect(() => {
+    if (!isLoggedIn || !currentUser || showOnboarding) return
     const t = setTimeout(() => registerPushToken(currentUser.id), 3000)
     return () => clearTimeout(t)
-  }, [isLoggedIn, currentUser?.id])
+  }, [isLoggedIn, currentUser?.id, showOnboarding])
 
   if (authLoading) {
     return (
@@ -47,6 +56,14 @@ function AppContent() {
           <Route path="/stats" element={<Stats gameState={gameState} />} />
         </Routes>
       </main>
+
+      {/* Onboarding modal — shown once per device */}
+      {showOnboarding && currentUser && (
+        <OnboardingModal
+          userId={currentUser.id}
+          onDone={() => setShowOnboarding(false)}
+        />
+      )}
 
       {/* Bottom navigation */}
       <nav className="fixed bottom-0 inset-x-0 bg-gray-900/95 backdrop-blur border-t border-gray-800 z-30">
