@@ -9,6 +9,8 @@ import {
   voteOnFlag,
   resolveFlag,
   deleteWorkout,
+  addReaction,
+  removeReaction,
 } from '../services/firebaseService'
 import Avatar from '../components/Avatar'
 
@@ -94,6 +96,24 @@ export default function Feed() {
     } catch (err) {
       console.error('Vote error:', err)
       alert('Error al votar. Intenta de nuevo.')
+    }
+  }
+
+  // ── Reactions ───────────────────────────────────────────────
+  const REACTION_EMOJIS = ['💪', '🔥', '👏', '😮', '😂']
+
+  const handleReaction = async (workoutId, emoji) => {
+    if (!currentUser) return
+    const workout = workouts.find((w) => w.id === workoutId)
+    const myCurrentReaction = workout?.reactions?.[currentUser.id]
+    try {
+      if (myCurrentReaction === emoji) {
+        await removeReaction(workoutId, currentUser.id)
+      } else {
+        await addReaction(workoutId, currentUser.id, emoji)
+      }
+    } catch (err) {
+      console.error('Reaction error:', err)
     }
   }
 
@@ -239,6 +259,37 @@ export default function Feed() {
                     </p>
                   )}
                 </div>
+
+                {/* ── Reactions ──────────────────────────────── */}
+                {(() => {
+                  const reactionMap = w.reactions || {}
+                  const myReaction = reactionMap[currentUser?.id]
+                  // Aggregate counts per emoji
+                  const counts = REACTION_EMOJIS.reduce((acc, e) => {
+                    acc[e] = Object.values(reactionMap).filter((v) => v === e).length
+                    return acc
+                  }, {})
+                  return (
+                    <div className="px-3 pb-2 flex gap-1.5 flex-wrap">
+                      {REACTION_EMOJIS.map((emoji) => (
+                        <button
+                          key={emoji}
+                          onClick={() => handleReaction(w.id, emoji)}
+                          className={`flex items-center gap-1 px-2 py-1 rounded-full text-sm transition-all active:scale-90 ${
+                            myReaction === emoji
+                              ? 'bg-indigo-600/30 ring-1 ring-indigo-500 text-white'
+                              : 'bg-gray-700/50 text-gray-400 hover:bg-gray-700'
+                          }`}
+                        >
+                          <span>{emoji}</span>
+                          {counts[emoji] > 0 && (
+                            <span className="text-xs font-semibold">{counts[emoji]}</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )
+                })()}
 
                 {/* ── Flag & Vote section ────────────────────── */}
                 {(() => {

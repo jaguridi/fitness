@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard'
 import Feed from './pages/Feed'
 import UserDetail from './pages/UserDetail'
 import Admin from './pages/Admin'
+import Rules from './pages/Rules'
 
 function AppContent() {
   const { isLoggedIn, loading: authLoading } = useAuth()
@@ -32,6 +33,7 @@ function AppContent() {
           <Route path="/feed" element={<Feed />} />
           <Route path="/user/:userId" element={<UserDetail gameState={gameState} />} />
           <Route path="/admin" element={<Admin gameState={gameState} />} />
+          <Route path="/rules" element={<Rules />} />
         </Routes>
       </main>
 
@@ -59,6 +61,17 @@ function AppContent() {
           >
             <div className="text-xl">📸</div>
             <div>Feed</div>
+          </NavLink>
+          <NavLink
+            to="/rules"
+            className={({ isActive }) =>
+              `flex-1 py-3 text-center text-sm font-medium transition-colors ${
+                isActive ? 'text-indigo-400' : 'text-gray-500 hover:text-gray-300'
+              }`
+            }
+          >
+            <div className="text-xl">📋</div>
+            <div>Reglas</div>
           </NavLink>
           <NavLink
             to="/admin"

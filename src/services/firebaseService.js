@@ -13,6 +13,7 @@ import {
   limit,
   onSnapshot,
   serverTimestamp,
+  deleteField,
 } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '../firebase'
@@ -277,6 +278,35 @@ export function subscribeFlaggedWorkouts(callback, onError) {
       onError?.(err)
     }
   )
+}
+
+// ── Reactions ────────────────────────────────────────────────
+
+/** Add or change a reaction on a workout. Stored as reactions.{userId} = emoji */
+export async function addReaction(workoutId, userId, emoji) {
+  await updateDoc(doc(db, 'workouts', workoutId), {
+    [`reactions.${userId}`]: emoji,
+  })
+}
+
+/** Remove a user's reaction from a workout. */
+export async function removeReaction(workoutId, userId) {
+  await updateDoc(doc(db, 'workouts', workoutId), {
+    [`reactions.${userId}`]: deleteField(),
+  })
+}
+
+// ── App Meta (settings/meta) ──────────────────────────────────
+
+const metaDoc = () => doc(db, 'settings', 'meta')
+
+export async function getAppMeta() {
+  const snap = await getDoc(metaDoc())
+  return snap.exists() ? snap.data() : {}
+}
+
+export async function setAppMeta(data) {
+  await setDoc(metaDoc(), data, { merge: true })
 }
 
 // ── Photo Upload ─────────────────────────────────────────────

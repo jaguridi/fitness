@@ -19,8 +19,131 @@ import {
   subscribeUsers,
   subscribeWorkoutsForWeek,
   getJustificationsForWeek,
+  getAppMeta,
+  setAppMeta,
 } from '../services/firebaseService'
 import { getWeekId, getPreviousWeekId } from './useWeekId'
+
+/**
+ * Standalone week-end processing logic.
+ * Accepts fetched users + absences directly so it can run before React state is ready.
+ */
+async function runWeekEnd(weekId, fetchedUsers, fetchedAbsences) {
+  const weekWorkouts = await getWorkoutsForWeek(weekId)
+  const weekJustifications = await getJustificationsForWeek(weekId)
+  const prevWeekId = getPreviousWeekId(weekId)
+
+  for (const u of USERS) {
+    const user = fetchedUsers.find((usr) => usr.id === u.id)
+    if (!user) continue
+
+    const frozen = fetchedAbsences.some(
+      (a) => a.userId === u.id && a.frozenWeekId === weekId
+    )
+
+    if (frozen) {
+      await setWeeklySummary(u.id, weekId, {
+        status: 'frozen',
+        sessions: 0,
+        fineApplied: 0,
+        lifeUsed: false,
+        lifeEarned: false,
+      })
+      continue
+    }
+
+    const sessions = weekWorkouts.filter((w) => w.userId === u.id).length
+    const recoverySessions = fetchedAbsences
+      .filter((a) => a.userId === u.id && a.recoveryWeeks?.includes(weekId))
+      .reduce((sum, a) => sum + (a.missedSessionsPerRecoveryWeek?.[weekId] || 0), 0)
+    const totalRequired = WEEKLY_GOAL + recoverySessions
+
+    let fineApplied = 0
+    let lifeUsed = false
+    let lifeEarned = false
+    let shieldEarned = false
+    let shieldBroken = false
+    let newLives = user.extraLives || 0
+    let consecutiveMisses = user.consecutiveMisses || 0
+    let consecutiveSuccesses = user.consecutiveSuccesses || 0
+    let hasShield = user.hasShield || false
+    let currentFineLevel = user.currentFineLevel || BASE_FINE
+
+    const deficit = totalRequired - sessions
+
+    if (deficit <= 0) {
+      currentFineLevel = Math.max(BASE_FINE, Math.floor(currentFineLevel / 2))
+      consecutiveMisses = 0
+      consecutiveSuccesses += 1
+      if (consecutiveSuccesses >= 4 && !hasShield) {
+        hasShield = true
+        shieldEarned = true
+      }
+      const regularPlusBonus = sessions - recoverySessions
+      if (regularPlusBonus >= EXTRA_LIFE_THRESHOLD) {
+        lifeEarned = true
+        newLives += 1
+      }
+    } else if (deficit === 1 && newLives > 0) {
+      lifeUsed = true
+      newLives -= 1
+      currentFineLevel = Math.max(BASE_FINE, Math.floor(currentFineLevel / 2))
+      consecutiveMisses = 0
+      consecutiveSuccesses += 1
+      if (consecutiveSuccesses >= 4 && !hasShield) {
+        hasShield = true
+        shieldEarned = true
+      }
+    } else {
+      const justification = weekJustifications.find(
+        (j) => j.userId === u.id && j.aiVerdict === true
+      )
+      if (justification) {
+        consecutiveSuccesses = 0
+      } else {
+        let baseFine = currentFineLevel
+        if (hasShield) {
+          baseFine = Math.floor(baseFine / 2)
+          hasShield = false
+          shieldBroken = true
+        }
+        fineApplied = baseFine
+        consecutiveMisses += 1
+        consecutiveSuccesses = 0
+        currentFineLevel = Math.min(MAX_FINE, currentFineLevel * 2)
+      }
+    }
+
+    await setUser(u.id, {
+      extraLives: newLives,
+      walletBalance: (user.walletBalance || 0) + fineApplied,
+      currentFineLevel,
+      consecutiveMisses,
+      consecutiveSuccesses,
+      hasShield,
+    })
+
+    const justifiedThisWeek = weekJustifications.find(
+      (j) => j.userId === u.id && j.aiVerdict === true
+    )
+    let weekStatus = 'completed'
+    if (fineApplied > 0) weekStatus = 'missed'
+    else if (justifiedThisWeek && deficit > 0) weekStatus = 'justified'
+
+    await setWeeklySummary(u.id, weekId, {
+      status: weekStatus,
+      sessions,
+      totalRequired,
+      recoverySessions,
+      fineApplied,
+      lifeUsed,
+      lifeEarned,
+      shieldEarned,
+      shieldBroken,
+      deficit: Math.max(0, deficit),
+    })
+  }
+}
 
 /**
  * useGameLogic – The core hook that calculates fines, extra lives,
@@ -76,6 +199,19 @@ export default function useGameLogic() {
         // Load absences
         const abs = await getAllAbsences()
         setAbsences(abs)
+
+        // Auto week-end processing: close previous week if not yet done
+        try {
+          const prevWeekId = getPreviousWeekId(currentWeekId)
+          const meta = await getAppMeta()
+          if (meta.lastAutoProcessedWeekId !== prevWeekId) {
+            // Claim the lock first to prevent concurrent processing
+            await setAppMeta({ lastAutoProcessedWeekId: prevWeekId })
+            await runWeekEnd(prevWeekId, existing, abs)
+          }
+        } catch (autoErr) {
+          console.warn('Auto week-end processing failed:', autoErr)
+        }
 
         // Subscribe to real-time updates (with error handlers)
         unsubUsers = subscribeUsers(
@@ -184,150 +320,10 @@ export default function useGameLogic() {
     [users, getSessionCount, getRecoverySessions, isWeekFrozen]
   )
 
-  // ── Process end-of-week (to be called manually or via a cron) ──
+  // ── Process end-of-week (manual fallback in Admin) ──────────
   const processWeekEnd = useCallback(
     async (weekId = currentWeekId) => {
-      const weekWorkouts = await getWorkoutsForWeek(weekId)
-      const weekJustifications = await getJustificationsForWeek(weekId)
-      const prevWeekId = getPreviousWeekId(weekId)
-
-      for (const u of USERS) {
-        const user = users.find((usr) => usr.id === u.id)
-        if (!user) continue
-
-        const frozen = absences.some(
-          (a) => a.userId === u.id && a.frozenWeekId === weekId
-        )
-
-        if (frozen) {
-          await setWeeklySummary(u.id, weekId, {
-            status: 'frozen',
-            sessions: 0,
-            fineApplied: 0,
-            lifeUsed: false,
-            lifeEarned: false,
-          })
-          continue
-        }
-
-        const sessions = weekWorkouts.filter((w) => w.userId === u.id).length
-        const recoverySessions = absences
-          .filter(
-            (a) =>
-              a.userId === u.id && a.recoveryWeeks?.includes(weekId)
-          )
-          .reduce(
-            (sum, a) => sum + (a.missedSessionsPerRecoveryWeek?.[weekId] || 0),
-            0
-          )
-        const totalRequired = WEEKLY_GOAL + recoverySessions
-
-        let fineApplied = 0
-        let lifeUsed = false
-        let lifeEarned = false
-        let shieldEarned = false
-        let shieldBroken = false
-        let newLives = user.extraLives || 0
-        let consecutiveMisses = user.consecutiveMisses || 0
-        let consecutiveSuccesses = user.consecutiveSuccesses || 0
-        let hasShield = user.hasShield || false
-        let currentFineLevel = user.currentFineLevel || BASE_FINE
-
-        const deficit = totalRequired - sessions
-
-        if (deficit <= 0) {
-          // Goal met! Reduce fine level
-          currentFineLevel = Math.max(BASE_FINE, Math.floor(currentFineLevel / 2))
-          consecutiveMisses = 0
-          consecutiveSuccesses += 1
-
-          // Check for shield: 4 consecutive successful weeks (only if no shield yet)
-          if (consecutiveSuccesses >= 4 && !hasShield) {
-            hasShield = true
-            shieldEarned = true
-            // Don't reset consecutiveSuccesses — shield stays until broken
-          }
-
-          // Check for extra life (only regular sessions count, not recovery)
-          const regularPlusBonus = sessions - recoverySessions
-          if (regularPlusBonus >= EXTRA_LIFE_THRESHOLD) {
-            lifeEarned = true
-            newLives += 1
-          }
-        } else if (deficit === 1 && newLives > 0) {
-          // Use an extra life
-          lifeUsed = true
-          newLives -= 1
-          currentFineLevel = Math.max(BASE_FINE, Math.floor(currentFineLevel / 2))
-          consecutiveMisses = 0
-          consecutiveSuccesses += 1
-
-          // Life used counts as success for shield streak
-          if (consecutiveSuccesses >= 4 && !hasShield) {
-            hasShield = true
-            shieldEarned = true
-          }
-        } else {
-          // Check if user has an accepted justification for this week
-          const justification = weekJustifications.find(
-            (j) => j.userId === u.id && j.aiVerdict === true
-          )
-
-          if (justification) {
-            // Justified: freeze — no fine, but doesn't count as success
-            // Fine level stays the same, streak resets
-            consecutiveSuccesses = 0
-            // Don't increase consecutiveMisses — it's justified
-          } else {
-            // Missed without valid justification! Apply fine
-            let baseFine = currentFineLevel
-
-            // Shield: pay half, shield breaks
-            if (hasShield) {
-              baseFine = Math.floor(baseFine / 2)
-              hasShield = false
-              shieldBroken = true
-            }
-
-            fineApplied = baseFine
-            consecutiveMisses += 1
-            consecutiveSuccesses = 0
-            currentFineLevel = Math.min(MAX_FINE, currentFineLevel * 2)
-          }
-        }
-
-        // Update user profile
-        await setUser(u.id, {
-          extraLives: newLives,
-          walletBalance: (user.walletBalance || 0) + fineApplied,
-          currentFineLevel,
-          consecutiveMisses,
-          consecutiveSuccesses,
-          hasShield,
-        })
-
-        // Determine status
-        const justifiedThisWeek = weekJustifications.find(
-          (j) => j.userId === u.id && j.aiVerdict === true
-        )
-        let weekStatus = 'completed'
-        if (fineApplied > 0) weekStatus = 'missed'
-        else if (justifiedThisWeek && deficit > 0) weekStatus = 'justified'
-
-        // Save weekly summary
-        await setWeeklySummary(u.id, weekId, {
-          status: weekStatus,
-          sessions,
-          totalRequired,
-          recoverySessions,
-          fineApplied,
-          lifeUsed,
-          lifeEarned,
-          shieldEarned,
-          shieldBroken,
-          deficit: Math.max(0, deficit),
-        })
-      }
+      await runWeekEnd(weekId, users, absences)
     },
     [users, absences, currentWeekId]
   )
