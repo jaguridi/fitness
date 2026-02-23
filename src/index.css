@@ -1,1 +1,22 @@
 @import "tailwindcss";
+
+@keyframes confettiFall {
+  0% {
+    transform: translateY(0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(110vh) rotate(720deg) scale(0.4);
+    opacity: 0;
+  }
+}
+
+.confetti-piece {
+  position: fixed;
+  animation: confettiFall linear forwards;
+  pointer-events: none;
+  z-index: 110;
+}

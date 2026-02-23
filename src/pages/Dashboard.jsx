@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { USERS } from '../constants'
 import { formatWeekLabel } from '../hooks/useWeekId'
 import { useAuth } from '../context/AuthContext'
@@ -8,12 +8,28 @@ import PotCounter from '../components/PotCounter'
 import WallOfShame from '../components/WallOfShame'
 import WorkoutLogger from '../components/WorkoutLogger'
 import JustificationModal from '../components/JustificationModal'
+import EasterEgg from '../components/EasterEgg'
 
 export default function Dashboard({ gameState }) {
   const { currentUser } = useAuth()
   const [showLogger, setShowLogger] = useState(false)
   const [showJustification, setShowJustification] = useState(false)
   const [existingJustification, setExistingJustification] = useState(null) // null = no justification, object = existing
+  const [showEasterEgg, setShowEasterEgg] = useState(false)
+
+  // Easter egg: tap "FitFamily" heading 7 times within 3 seconds
+  const eggTaps = useRef(0)
+  const eggTimer = useRef(null)
+  const handleTitleTap = () => {
+    eggTaps.current += 1
+    clearTimeout(eggTimer.current)
+    if (eggTaps.current >= 7) {
+      eggTaps.current = 0
+      setShowEasterEgg(true)
+      return
+    }
+    eggTimer.current = setTimeout(() => { eggTaps.current = 0 }, 3000)
+  }
 
   const {
     users,
@@ -75,9 +91,14 @@ export default function Dashboard({ gameState }) {
 
   return (
     <div className="space-y-4 pb-24">
-      {/* Week header */}
+      {/* Week header — tap title 7× to unlock secret mode */}
       <div className="text-center">
-        <h2 className="text-2xl font-black text-white">FitFamily</h2>
+        <h2
+          className="text-2xl font-black text-white select-none cursor-default"
+          onClick={handleTitleTap}
+        >
+          FitFamily
+        </h2>
         <p className="text-sm text-gray-400 mt-1">
           📅 {formatWeekLabel(currentWeekId)}
         </p>
@@ -181,6 +202,14 @@ export default function Dashboard({ gameState }) {
           onResult={(verdict) => {
             refreshJustification()
           }}
+        />
+      )}
+
+      {/* 🎉 Easter egg — unlocked by tapping "FitFamily" 7 times */}
+      {showEasterEgg && (
+        <EasterEgg
+          users={users}
+          onClose={() => setShowEasterEgg(false)}
         />
       )}
     </div>
