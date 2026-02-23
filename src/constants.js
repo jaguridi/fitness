@@ -14,7 +14,16 @@ export const USERS = [
   },
   { id: 'user2', name: 'Javi', avatar: '🧘‍♀️' },
   { id: 'user3', name: 'Gonza', avatar: '🏃‍♂️' },
-  { id: 'user4', name: 'Fran', avatar: '🚴‍♀️' },
+  {
+    id: 'user4',
+    name: 'Fran',
+    avatar: '/avatars/fran.png',
+    avatarMoods: {
+      happy: '/avatars/fran_happy.png',
+      normal: '/avatars/fran.png',
+      sad: '/avatars/fran_sad.png',
+    },
+  },
 ]
 
 /**
