@@ -9,6 +9,7 @@ import WallOfShame from '../components/WallOfShame'
 import WorkoutLogger from '../components/WorkoutLogger'
 import JustificationModal from '../components/JustificationModal'
 import EasterEgg from '../components/EasterEgg'
+import MiniGame from '../components/MiniGame'
 
 export default function Dashboard({ gameState }) {
   const { currentUser } = useAuth()
@@ -16,6 +17,7 @@ export default function Dashboard({ gameState }) {
   const [showJustification, setShowJustification] = useState(false)
   const [existingJustification, setExistingJustification] = useState(null) // null = no justification, object = existing
   const [showEasterEgg, setShowEasterEgg] = useState(false)
+  const [showMiniGame, setShowMiniGame] = useState(false)
 
   // Easter egg: tap "FitFamily" heading 7 times within 3 seconds
   const eggTaps = useRef(0)
@@ -29,6 +31,20 @@ export default function Dashboard({ gameState }) {
       return
     }
     eggTimer.current = setTimeout(() => { eggTaps.current = 0 }, 3000)
+  }
+
+  // Easter egg 2: tap the pot 10 times within 5 seconds → mini-game
+  const gameTaps = useRef(0)
+  const gameTimer = useRef(null)
+  const handlePotTap = () => {
+    gameTaps.current += 1
+    clearTimeout(gameTimer.current)
+    if (gameTaps.current >= 10) {
+      gameTaps.current = 0
+      setShowMiniGame(true)
+      return
+    }
+    gameTimer.current = setTimeout(() => { gameTaps.current = 0 }, 5000)
   }
 
   const {
@@ -104,8 +120,10 @@ export default function Dashboard({ gameState }) {
         </p>
       </div>
 
-      {/* Pot */}
-      <PotCounter total={totalPot} />
+      {/* Pot — tap 10× to unlock mini-game */}
+      <div onClick={handlePotTap} className="select-none">
+        <PotCounter total={totalPot} />
+      </div>
 
       {/* User cards */}
       <div className="space-y-3">
@@ -210,6 +228,14 @@ export default function Dashboard({ gameState }) {
         <EasterEgg
           users={users}
           onClose={() => setShowEasterEgg(false)}
+        />
+      )}
+
+      {/* 🎮 Easter egg 2 — unlocked by tapping pot 10 times */}
+      {showMiniGame && (
+        <MiniGame
+          currentUser={currentUser}
+          onClose={() => setShowMiniGame(false)}
         />
       )}
     </div>
