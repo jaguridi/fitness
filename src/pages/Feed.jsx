@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { USERS } from '../constants'
+import { USERS, getExerciseTypes, formatExerciseTypes } from '../constants'
 import { useAuth } from '../context/AuthContext'
 import {
   subscribeAllWorkouts,
@@ -269,9 +269,16 @@ export default function Feed() {
                       🚩 En revisión
                     </span>
                   )}
-                  <span className="bg-indigo-600/20 text-indigo-400 text-xs font-semibold px-2 py-0.5 rounded-full">
-                    {w.exerciseType}
-                  </span>
+                  <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
+                    {getExerciseTypes(w).map((t) => (
+                      <span
+                        key={t}
+                        className="bg-indigo-600/20 text-indigo-400 text-xs font-semibold px-2 py-0.5 rounded-full"
+                      >
+                        {t}
+                      </span>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Photo */}
@@ -282,7 +289,7 @@ export default function Feed() {
                   >
                     <img
                       src={w.photoURL}
-                      alt={w.exerciseType}
+                      alt={formatExerciseTypes(w)}
                       loading="lazy"
                       className="w-full max-h-96 object-cover hover:opacity-90 transition-opacity"
                     />
@@ -499,7 +506,7 @@ export default function Feed() {
                 <Avatar src={owner.avatar} name={owner.name} size="sm" />
                 <div>
                   <p className="font-semibold text-white text-sm">{owner.name}</p>
-                  <p className="text-xs text-gray-400">{workout.exerciseType} · {workout.date}</p>
+                  <p className="text-xs text-gray-400">{formatExerciseTypes(workout)} · {workout.date}</p>
                 </div>
               </div>
               <p className="text-sm text-gray-300 text-center">

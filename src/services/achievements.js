@@ -185,7 +185,15 @@ function getBestStreak(summaries) {
 }
 
 function getUniqueExerciseTypes(workouts) {
-  return new Set(workouts.map((w) => w.exerciseType).filter(Boolean)).size
+  const set = new Set()
+  for (const w of workouts) {
+    if (Array.isArray(w.exerciseType)) {
+      for (const t of w.exerciseType) if (t) set.add(t)
+    } else if (w.exerciseType) {
+      set.add(w.exerciseType)
+    }
+  }
+  return set.size
 }
 
 /**

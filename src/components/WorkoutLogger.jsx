@@ -13,7 +13,7 @@ export default function WorkoutLogger({ onClose, onSuccess }) {
   const userId = currentUser?.id || ''
 
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'))
-  const [exerciseType, setExerciseType] = useState('')
+  const [exerciseTypes, setExerciseTypes] = useState([]) // array now
   const [duration, setDuration] = useState('')
   const [description, setDescription] = useState('')
   const [photo, setPhoto] = useState(null)
@@ -65,8 +65,8 @@ export default function WorkoutLogger({ onClose, onSuccess }) {
     e.preventDefault()
     setError('')
 
-    if (!userId || !date || !exerciseType || !duration || !photo) {
-      setError('Todos los campos son obligatorios, incluyendo la foto.')
+    if (!userId || !date || exerciseTypes.length === 0 || !duration || !photo) {
+      setError('Todos los campos son obligatorios, incluyendo la foto y al menos un tipo de ejercicio.')
       return
     }
 
@@ -85,7 +85,7 @@ export default function WorkoutLogger({ onClose, onSuccess }) {
         userId,
         date,
         weekId,
-        exerciseType,
+        exerciseType: exerciseTypes, // now an array
         duration: parseInt(duration),
         description,
         photoURL,
@@ -148,23 +148,44 @@ export default function WorkoutLogger({ onClose, onSuccess }) {
             />
           </div>
 
-          {/* Exercise type */}
+          {/* Exercise type — multi-select chips */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">
-              Tipo de ejercicio
+              Tipo de ejercicio{' '}
+              <span className="text-xs text-gray-500 font-normal">
+                (puedes elegir varios)
+              </span>
             </label>
-            <select
-              value={exerciseType}
-              onChange={(e) => setExerciseType(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded-xl px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-            >
-              <option value="">Seleccionar...</option>
-              {EXERCISE_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
+            <div className="flex flex-wrap gap-1.5">
+              {EXERCISE_TYPES.map((t) => {
+                const selected = exerciseTypes.includes(t)
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => {
+                      setExerciseTypes((prev) =>
+                        prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
+                      )
+                    }}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all active:scale-95 ${
+                      selected
+                        ? 'bg-indigo-600 text-white ring-1 ring-indigo-400'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    {selected && '✓ '}{t}
+                  </button>
+                )
+              })}
+            </div>
+            {exerciseTypes.length > 0 && (
+              <p className="mt-1.5 text-xs text-indigo-400">
+                {exerciseTypes.length === 1
+                  ? `Seleccionado: ${exerciseTypes[0]}`
+                  : `${exerciseTypes.length} ejercicios: ${exerciseTypes.join(' + ')}`}
+              </p>
+            )}
           </div>
 
           {/* Duration */}

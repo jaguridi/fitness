@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { USERS, formatCLP } from '../constants'
+import { USERS, formatCLP, formatExerciseTypes } from '../constants'
 import { getUserSummaries, getWorkoutsByUser } from '../services/firebaseService'
 import { formatWeekLabel } from '../hooks/useWeekId'
 import Avatar from './Avatar'
@@ -131,7 +131,7 @@ export default function WeeklyHistory() {
                   />
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white">{w.exerciseType}</p>
+                  <p className="text-sm font-medium text-white">{formatExerciseTypes(w)}</p>
                   <p className="text-xs text-gray-400">
                     {w.date} · {w.duration} min
                   </p>

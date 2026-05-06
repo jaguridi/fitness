@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { getExerciseTypes } from '../constants'
 import { getUserSummaries, getWorkoutsByUser } from '../services/firebaseService'
 
 /**
@@ -68,7 +69,7 @@ function computeStats(summaries, workouts) {
   for (const w of workouts) {
     if ((w.duration || 0) > longestSession) {
       longestSession = w.duration
-      longestSessionType = w.exerciseType || ''
+      longestSessionType = getExerciseTypes(w).join(' + ')
     }
   }
 
@@ -99,19 +100,19 @@ function computeStats(summaries, workouts) {
   const totalWorkouts = workouts.length
   const totalMinutes = workouts.reduce((sum, w) => sum + (w.duration || 0), 0)
 
-  // Favorite exercise type
+  // Favorite exercise type — count each type separately (a workout with 2 types adds 1 to each)
   const typeCounts = {}
   for (const w of workouts) {
-    if (w.exerciseType) {
-      typeCounts[w.exerciseType] = (typeCounts[w.exerciseType] || 0) + 1
+    for (const t of getExerciseTypes(w)) {
+      typeCounts[t] = (typeCounts[t] || 0) + 1
     }
   }
   const sortedTypes = Object.entries(typeCounts).sort((a, b) => b[1] - a[1])
   const favoriteExercise = sortedTypes[0]?.[0] || null
   const favoriteCount = sortedTypes[0]?.[1] || 0
 
-  // Unique exercise types
-  const uniqueTypes = new Set(workouts.map((w) => w.exerciseType).filter(Boolean)).size
+  // Unique exercise types — flatten arrays
+  const uniqueTypes = Object.keys(typeCounts).length
 
   // Available types count (from constants — approximate)
   const availableTypes = 24

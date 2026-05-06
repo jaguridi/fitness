@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { USERS, formatCLP } from '../constants'
+import { USERS, formatCLP, getExerciseTypes, formatExerciseTypes } from '../constants'
 import { getWorkoutsByUser } from '../services/firebaseService'
 import Avatar from '../components/Avatar'
 import AchievementBadges from '../components/AchievementBadges'
@@ -136,7 +136,7 @@ export default function UserDetail({ gameState }) {
                 >
                   <img
                     src={w.photoURL}
-                    alt={w.exerciseType}
+                    alt={formatExerciseTypes(w)}
                     loading="lazy"
                     className="w-full h-64 object-cover hover:opacity-90 transition-opacity"
                   />
@@ -145,11 +145,18 @@ export default function UserDetail({ gameState }) {
 
               {/* Info */}
               <div className="p-4">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="bg-indigo-600/20 text-indigo-400 text-sm font-semibold px-2 py-0.5 rounded-full">
-                    {w.exerciseType}
-                  </span>
-                  <span className="text-gray-400 text-sm">
+                <div className="flex items-start justify-between mb-1 gap-2">
+                  <div className="flex flex-wrap gap-1">
+                    {getExerciseTypes(w).map((t) => (
+                      <span
+                        key={t}
+                        className="bg-indigo-600/20 text-indigo-400 text-sm font-semibold px-2 py-0.5 rounded-full"
+                      >
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                  <span className="text-gray-400 text-sm shrink-0">
                     {w.duration} min
                   </span>
                 </div>

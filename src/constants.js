@@ -80,6 +80,21 @@ export const EXERCISE_TYPES = [
   'Otro',
 ]
 
+/**
+ * Normalize a workout's exerciseType to always return an array.
+ * Handles legacy string format and new array format.
+ */
+export function getExerciseTypes(workout) {
+  if (!workout?.exerciseType) return []
+  if (Array.isArray(workout.exerciseType)) return workout.exerciseType
+  return [workout.exerciseType]
+}
+
+/** Format exercise types as a comma-separated string for display. */
+export function formatExerciseTypes(workout) {
+  return getExerciseTypes(workout).join(' + ')
+}
+
 // Format CLP
 export const formatCLP = (amount) => {
   return new Intl.NumberFormat('es-CL', {
