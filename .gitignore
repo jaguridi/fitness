@@ -1,5 +1,44 @@
+# Dependencies
 node_modules
+functions/node_modules
+
+# Build output
 dist
+build
+
+# Env files
 .env
 .env.local
+.env.*.local
 *.local
+
+# Editor / IDE
+.vscode
+.idea
+*.swp
+*.swo
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+nul
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Loose images / assets at repo root (user uploads, not part of source)
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+/*.webp
+/*.pdf
+
+# Session/scratch files
+SESSION_SUMMARY.md
+*.tmp
+*.bak
