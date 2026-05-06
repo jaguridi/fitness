@@ -28,23 +28,67 @@ import { getWeekId, getPreviousWeekId } from './useWeekId'
  * Standalone week-end processing logic.
  * Accepts fetched users + absences directly so it can run before React state is ready.
  */
+/**
+ * Compute the requirements for a user in a given week.
+ * Returns { recoverySessions, frozenSessions, totalRequired, fullyFrozen }
+ * - recoverySessions: sessions owed from previous frozen weeks
+ * - frozenSessions: sessions excused from this week (partial freeze allowed)
+ * - totalRequired: WEEKLY_GOAL + recovery - frozen (clamped to 0)
+ * - fullyFrozen: true when frozenSessions covers the entire (goal+recovery)
+ */
+function computeWeekRequirements(userId, weekId, absences) {
+  const recoverySessions = absences
+    .filter((a) => a.userId === userId && a.recoveryWeeks?.includes(weekId))
+    .reduce((sum, a) => sum + (a.missedSessionsPerRecoveryWeek?.[weekId] || 0), 0)
+
+  // Sum frozen sessions from any absence that targets this week
+  const frozenSessions = absences
+    .filter((a) => a.userId === userId && a.frozenWeekId === weekId)
+    .reduce((sum, a) => {
+      // Backwards compat: legacy absences without frozenSessions = full WEEKLY_GOAL
+      const fs = typeof a.frozenSessions === 'number' ? a.frozenSessions : WEEKLY_GOAL
+      return sum + fs
+    }, 0)
+
+  const baseGoal = WEEKLY_GOAL + recoverySessions
+  const fullyFrozen = frozenSessions >= baseGoal
+  const totalRequired = Math.max(0, baseGoal - frozenSessions)
+
+  return { recoverySessions, frozenSessions, totalRequired, fullyFrozen }
+}
+
+/**
+ * Compute total sessions justified by approved/pending justifications for a user/week.
+ * Backwards compat: legacy justifications without sessionsJustified field = WEEKLY_GOAL (full week).
+ */
+function computeSessionsJustified(userId, weekId, justifications) {
+  return justifications
+    .filter((j) => j.userId === userId && j.weekId === weekId &&
+      (j.aiVerdict === true || j.status === 'pending_vote'))
+    .reduce((sum, j) => {
+      const sj = typeof j.sessionsJustified === 'number' ? j.sessionsJustified : WEEKLY_GOAL
+      return sum + sj
+    }, 0)
+}
+
 async function runWeekEnd(weekId, fetchedUsers, fetchedAbsences) {
   const weekWorkouts = await getWorkoutsForWeek(weekId)
   const weekJustifications = await getJustificationsForWeek(weekId)
-  const prevWeekId = getPreviousWeekId(weekId)
 
   for (const u of USERS) {
     const user = fetchedUsers.find((usr) => usr.id === u.id)
     if (!user) continue
 
-    const frozen = fetchedAbsences.some(
-      (a) => a.userId === u.id && a.frozenWeekId === weekId
-    )
+    const { recoverySessions, frozenSessions, totalRequired, fullyFrozen } =
+      computeWeekRequirements(u.id, weekId, fetchedAbsences)
 
-    if (frozen) {
+    if (fullyFrozen) {
       await setWeeklySummary(u.id, weekId, {
         status: 'frozen',
         sessions: 0,
+        totalRequired: 0,
+        recoverySessions,
+        frozenSessions,
         fineApplied: 0,
         lifeUsed: false,
         lifeEarned: false,
@@ -53,10 +97,6 @@ async function runWeekEnd(weekId, fetchedUsers, fetchedAbsences) {
     }
 
     const sessions = weekWorkouts.filter((w) => w.userId === u.id).length
-    const recoverySessions = fetchedAbsences
-      .filter((a) => a.userId === u.id && a.recoveryWeeks?.includes(weekId))
-      .reduce((sum, a) => sum + (a.missedSessionsPerRecoveryWeek?.[weekId] || 0), 0)
-    const totalRequired = WEEKLY_GOAL + recoverySessions
 
     let fineApplied = 0
     let lifeUsed = false
@@ -70,8 +110,12 @@ async function runWeekEnd(weekId, fetchedUsers, fetchedAbsences) {
     let currentFineLevel = user.currentFineLevel || BASE_FINE
 
     const deficit = totalRequired - sessions
+    const sessionsJustified = computeSessionsJustified(u.id, weekId, weekJustifications)
+    const effectiveDeficit = Math.max(0, deficit - sessionsJustified)
+    const usedJustification = deficit > 0 && sessionsJustified > 0
 
     if (deficit <= 0) {
+      // Goal met without needing justifications
       currentFineLevel = Math.max(BASE_FINE, Math.floor(currentFineLevel / 2))
       consecutiveMisses = 0
       consecutiveSuccesses += 1
@@ -84,7 +128,11 @@ async function runWeekEnd(weekId, fetchedUsers, fetchedAbsences) {
         lifeEarned = true
         newLives += 1
       }
-    } else if (deficit === 1 && newLives > 0) {
+    } else if (effectiveDeficit === 0) {
+      // Justifications cover the deficit completely → no fine, but streak resets
+      consecutiveSuccesses = 0
+    } else if (effectiveDeficit === 1 && newLives > 0) {
+      // Use a life to cover the last session
       lifeUsed = true
       newLives -= 1
       currentFineLevel = Math.max(BASE_FINE, Math.floor(currentFineLevel / 2))
@@ -95,25 +143,17 @@ async function runWeekEnd(weekId, fetchedUsers, fetchedAbsences) {
         shieldEarned = true
       }
     } else {
-      // Accept justification if AI approved, human vote approved, OR still pending vote
-      // (pending_vote = AI failed, give benefit of the doubt)
-      const justification = weekJustifications.find(
-        (j) => j.userId === u.id && (j.aiVerdict === true || j.status === 'pending_vote')
-      )
-      if (justification) {
-        consecutiveSuccesses = 0
-      } else {
-        let baseFine = currentFineLevel
-        if (hasShield) {
-          baseFine = Math.floor(baseFine / 2)
-          hasShield = false
-          shieldBroken = true
-        }
-        fineApplied = baseFine
-        consecutiveMisses += 1
-        consecutiveSuccesses = 0
-        currentFineLevel = Math.min(MAX_FINE, currentFineLevel * 2)
+      // Apply fine
+      let baseFine = currentFineLevel
+      if (hasShield) {
+        baseFine = Math.floor(baseFine / 2)
+        hasShield = false
+        shieldBroken = true
       }
+      fineApplied = baseFine
+      consecutiveMisses += 1
+      consecutiveSuccesses = 0
+      currentFineLevel = Math.min(MAX_FINE, currentFineLevel * 2)
     }
 
     await setUser(u.id, {
@@ -125,24 +165,24 @@ async function runWeekEnd(weekId, fetchedUsers, fetchedAbsences) {
       hasShield,
     })
 
-    const justifiedThisWeek = weekJustifications.find(
-      (j) => j.userId === u.id && (j.aiVerdict === true || j.status === 'pending_vote')
-    )
     let weekStatus = 'completed'
     if (fineApplied > 0) weekStatus = 'missed'
-    else if (justifiedThisWeek && deficit > 0) weekStatus = 'justified'
+    else if (usedJustification && deficit > 0) weekStatus = 'justified'
 
     await setWeeklySummary(u.id, weekId, {
       status: weekStatus,
       sessions,
       totalRequired,
       recoverySessions,
+      frozenSessions,
+      sessionsJustified,
       fineApplied,
       lifeUsed,
       lifeEarned,
       shieldEarned,
       shieldBroken,
       deficit: Math.max(0, deficit),
+      effectiveDeficit,
     })
   }
 }
@@ -264,25 +304,23 @@ export default function useGameLogic() {
   // ── Get recovery sessions owed for this week ───────────────
   const getRecoverySessions = useCallback(
     (userId) => {
-      const userAbsences = absences.filter(
-        (a) =>
-          a.userId === userId &&
-          a.recoveryWeeks?.includes(currentWeekId)
-      )
-      return userAbsences.reduce(
-        (sum, a) => sum + (a.missedSessionsPerRecoveryWeek?.[currentWeekId] || 0),
-        0
-      )
+      return computeWeekRequirements(userId, currentWeekId, absences).recoverySessions
     },
     [absences, currentWeekId]
   )
 
-  // ── Check if week is frozen (planned absence) ──────────────
+  // ── Get frozen sessions for this week (partial freezing supported) ──
+  const getFrozenSessions = useCallback(
+    (userId) => {
+      return computeWeekRequirements(userId, currentWeekId, absences).frozenSessions
+    },
+    [absences, currentWeekId]
+  )
+
+  // ── Check if week is fully frozen (no sessions required) ──────────
   const isWeekFrozen = useCallback(
     (userId) => {
-      return absences.some(
-        (a) => a.userId === userId && a.frozenWeekId === currentWeekId
-      )
+      return computeWeekRequirements(userId, currentWeekId, absences).fullyFrozen
     },
     [absences, currentWeekId]
   )
@@ -299,9 +337,8 @@ export default function useGameLogic() {
       const user = { ...userFirestore, avatar: moodAvatar }
 
       const sessions = getSessionCount(userId)
-      const recoverySessions = getRecoverySessions(userId)
-      const frozen = isWeekFrozen(userId)
-      const totalRequired = frozen ? 0 : WEEKLY_GOAL + recoverySessions
+      const { recoverySessions, frozenSessions, totalRequired, fullyFrozen } =
+        computeWeekRequirements(userId, currentWeekId, absences)
       const regularSessions = Math.min(sessions, WEEKLY_GOAL)
       const bonusSessions = Math.max(0, sessions - WEEKLY_GOAL - recoverySessions)
 
@@ -312,14 +349,16 @@ export default function useGameLogic() {
         totalRequired,
         regularSessions,
         recoverySessions,
+        frozenSessions,
         bonusSessions,
-        frozen,
+        frozen: fullyFrozen,
+        partiallyFrozen: !fullyFrozen && frozenSessions > 0,
         goalMet: sessions >= totalRequired,
         progress: totalRequired > 0 ? Math.min(1, sessions / totalRequired) : 1,
-        canEarnLife: !frozen && sessions >= EXTRA_LIFE_THRESHOLD + recoverySessions,
+        canEarnLife: !fullyFrozen && sessions >= EXTRA_LIFE_THRESHOLD + recoverySessions,
       }
     },
-    [users, getSessionCount, getRecoverySessions, isWeekFrozen]
+    [users, getSessionCount, absences, currentWeekId]
   )
 
   // ── Process end-of-week (manual fallback in Admin) ──────────
@@ -347,6 +386,7 @@ export default function useGameLogic() {
     currentWeekId,
     getSessionCount,
     getRecoverySessions,
+    getFrozenSessions,
     isWeekFrozen,
     getUserWeekStatus,
     processWeekEnd,

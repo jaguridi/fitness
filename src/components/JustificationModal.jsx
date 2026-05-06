@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { addJustification, updateJustification, uploadJustificationPhoto } from '../services/firebaseService'
 import { evaluateExcuse } from '../services/aiJudge'
+import { WEEKLY_GOAL } from '../constants'
 import Avatar from './Avatar'
 import { compressImageWithPreview } from '../utils/compressImage'
 
@@ -21,6 +22,9 @@ export default function JustificationModal({ weekId, existing = null, onClose, o
   const { currentUser } = useAuth()
   const isAppeal = !!existing
   const [excuse, setExcuse] = useState(existing?.excuse || '')
+  const [sessionsJustified, setSessionsJustified] = useState(
+    existing?.sessionsJustified || 1
+  )
   const [photo, setPhoto] = useState(null)
   const [photoPreview, setPhotoPreview] = useState(existing?.evidencePhotoURL || null)
   const [submitting, setSubmitting] = useState(false)
@@ -74,6 +78,7 @@ export default function JustificationModal({ weekId, existing = null, onClose, o
       const isAiError = aiResult.aiError === true
       const justificationData = {
         excuse: excuse.trim(),
+        sessionsJustified,
         evidencePhotoURL,
         aiVerdict: isAiError ? null : aiResult.valid,
         aiReason: aiResult.reason,
@@ -166,6 +171,34 @@ export default function JustificationModal({ weekId, existing = null, onClose, o
           {!verdict ? (
             /* Submit form */
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Sessions to justify */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  ¿Cuántas sesiones quieres justificar?
+                </label>
+                <div className="flex gap-2">
+                  {Array.from({ length: WEEKLY_GOAL }, (_, i) => i + 1).map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setSessionsJustified(n)}
+                      className={`flex-1 py-2.5 rounded-xl font-bold transition-all active:scale-95 ${
+                        sessionsJustified === n
+                          ? 'bg-indigo-600 text-white ring-2 ring-indigo-400'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-xs text-gray-500">
+                  {sessionsJustified === WEEKLY_GOAL
+                    ? 'Justificas la semana completa. Si se aprueba, no debes hacer ninguna sesión.'
+                    : `Justificas ${sessionsJustified} sesión(es). Aún debes completar las restantes (${WEEKLY_GOAL - sessionsJustified}) para evitar la multa.`}
+                </p>
+              </div>
+
               {/* Excuse text */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">

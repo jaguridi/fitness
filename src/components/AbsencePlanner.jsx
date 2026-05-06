@@ -10,6 +10,7 @@ export default function AbsencePlanner({ onSuccess }) {
   const { currentUser } = useAuth()
   const userId = currentUser?.id || ''
   const [absenceDate, setAbsenceDate] = useState('')
+  const [frozenSessions, setFrozenSessions] = useState(WEEKLY_GOAL)
   const [recoveryWeeks, setRecoveryWeeks] = useState([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -44,19 +45,18 @@ export default function AbsencePlanner({ onSuccess }) {
 
     setSubmitting(true)
     try {
-      // Distribute missed sessions across recovery weeks
+      // Distribute frozen sessions across recovery weeks (round-robin for evenness)
       const missedPerWeek = {}
-      const sessionsPerRecovery = Math.ceil(WEEKLY_GOAL / recoveryWeeks.length)
-      let remaining = WEEKLY_GOAL
-      for (const wk of recoveryWeeks) {
-        const assigned = Math.min(sessionsPerRecovery, remaining)
-        missedPerWeek[wk] = assigned
-        remaining -= assigned
+      recoveryWeeks.forEach((wk) => { missedPerWeek[wk] = 0 })
+      for (let i = 0; i < frozenSessions; i++) {
+        const wk = recoveryWeeks[i % recoveryWeeks.length]
+        missedPerWeek[wk] += 1
       }
 
       await addAbsence({
         userId,
         frozenWeekId,
+        frozenSessions,
         recoveryWeeks,
         missedSessionsPerRecoveryWeek: missedPerWeek,
         status: 'active',
@@ -65,6 +65,7 @@ export default function AbsencePlanner({ onSuccess }) {
       setSuccess(true)
       setAbsenceDate('')
       setRecoveryWeeks([])
+      setFrozenSessions(WEEKLY_GOAL)
       onSuccess?.()
     } catch (err) {
       console.error(err)
@@ -108,6 +109,36 @@ export default function AbsencePlanner({ onSuccess }) {
             </p>
           )}
         </div>
+
+        {/* Frozen sessions selector */}
+        {frozenWeekId && (
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              ¿Cuántas sesiones quieres congelar?
+            </label>
+            <div className="flex gap-2">
+              {Array.from({ length: WEEKLY_GOAL }, (_, i) => i + 1).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setFrozenSessions(n)}
+                  className={`flex-1 py-2.5 rounded-xl font-bold transition-all active:scale-95 ${
+                    frozenSessions === n
+                      ? 'bg-blue-600 text-white ring-2 ring-blue-400'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-xs text-gray-500">
+              {frozenSessions === WEEKLY_GOAL
+                ? 'Congelas la semana completa. No tendrás meta esa semana.'
+                : `Congelas ${frozenSessions} sesión(es). Aún debes completar las restantes (${WEEKLY_GOAL - frozenSessions}) esa semana.`}
+            </p>
+          </div>
+        )}
 
         {/* Recovery weeks */}
         {adjacentWeeks.length > 0 && (

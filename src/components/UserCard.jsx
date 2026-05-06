@@ -13,7 +13,10 @@ export default function UserCard({ status, justification }) {
   const [nudgeMsg, setNudgeMsg] = useState(null)
 
   if (!status) return null
-  const { userId, user, sessions, totalRequired, frozen, goalMet, progress, canEarnLife } = status
+  const {
+    userId, user, sessions, totalRequired, frozen, partiallyFrozen,
+    frozenSessions, goalMet, progress, canEarnLife,
+  } = status
 
   const progressPct = Math.round(progress * 100)
   const hearts = '❤️'.repeat(user.extraLives || 0)
@@ -35,8 +38,16 @@ export default function UserCard({ status, justification }) {
           </div>
         </div>
         {frozen && (
-          <span className="bg-blue-600/20 text-blue-400 text-xs font-semibold px-2 py-1 rounded-full">
-            ❄️ Ausencia
+          <span className="bg-cyan-600/20 text-cyan-400 text-xs font-semibold px-2 py-1 rounded-full">
+            ❄️ Semana congelada
+          </span>
+        )}
+        {partiallyFrozen && !frozen && (
+          <span
+            className="bg-cyan-600/20 text-cyan-400 text-xs font-semibold px-2 py-1 rounded-full"
+            title={`${frozenSessions} sesión(es) congelada(s)`}
+          >
+            ❄️ -{frozenSessions}
           </span>
         )}
         {goalMet && !frozen && (

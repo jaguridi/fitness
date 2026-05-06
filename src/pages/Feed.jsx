@@ -224,6 +224,11 @@ export default function Feed() {
                     )}
 
                     <div className="p-3">
+                      {typeof j.sessionsJustified === 'number' && (
+                        <span className="inline-block text-xs font-semibold text-indigo-400 bg-indigo-900/30 px-2 py-0.5 rounded-full mb-1.5">
+                          {j.sessionsJustified} sesión{j.sessionsJustified > 1 ? 'es' : ''}
+                        </span>
+                      )}
                       <p className="text-gray-300 text-sm">
                         <span className="font-semibold text-white">{user.name}:</span>{' '}
                         &ldquo;{j.excuse}&rdquo;

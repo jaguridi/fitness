@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { USERS } from '../constants'
+import { USERS, WEEKLY_GOAL } from '../constants'
 import { voteOnJustification, resolveJustificationVote } from '../services/firebaseService'
 import Avatar from './Avatar'
 
@@ -13,6 +13,9 @@ export default function JustificationVoteCard({ justification, currentUserId }) 
 
   const owner = USERS.find((u) => u.id === justification.userId)
   const isOwner = justification.userId === currentUserId
+  const sessionsJustified = typeof justification.sessionsJustified === 'number'
+    ? justification.sessionsJustified
+    : WEEKLY_GOAL
   const votes = justification.votes || {}
   const myVote = votes[currentUserId]
   const eligibleVoters = USERS.filter((u) => u.id !== justification.userId)
@@ -90,7 +93,12 @@ export default function JustificationVoteCard({ justification, currentUserId }) 
       </div>
 
       <div className="bg-gray-800/50 rounded-xl p-3 mb-3">
-        <p className="text-xs text-gray-400 mb-1">Justificación:</p>
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <p className="text-xs text-gray-400">Justificación:</p>
+          <span className="text-xs font-semibold text-indigo-400 bg-indigo-900/30 px-2 py-0.5 rounded-full">
+            {sessionsJustified} sesión{sessionsJustified > 1 ? 'es' : ''}
+          </span>
+        </div>
         <p className="text-sm text-gray-200">{justification.excuse}</p>
         {justification.evidencePhotoURL && (
           <img

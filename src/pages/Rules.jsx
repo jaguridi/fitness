@@ -47,13 +47,14 @@ const sections = [
   },
   {
     icon: '🧊',
-    title: 'Semana congelada',
+    title: 'Semana congelada (parcial o total)',
     color: 'cyan',
     items: [
-      'Si sabes con anticipación que no podrás cumplir (viaje, vacaciones, etc.), puedes congelar esa semana.',
-      'La semana congelada no genera multa.',
-      'A cambio, debes distribuir las 3 sesiones no realizadas en las semanas anteriores y/o siguientes.',
-      'Hay un plazo para planificar: se debe hacer antes de que empiece la semana congelada.',
+      'Si sabes con anticipación que no podrás cumplir (viaje, vacaciones, etc.), puedes congelar 1, 2 o 3 sesiones de esa semana.',
+      `Si congelas las ${WEEKLY_GOAL} sesiones, la semana queda congelada por completo (sin meta).`,
+      `Si congelas menos, las restantes (${WEEKLY_GOAL - 1} o ${WEEKLY_GOAL - 2}) siguen siendo obligatorias esa semana.`,
+      'Las sesiones congeladas se redistribuyen como recuperación en las semanas anteriores y/o siguientes que elijas.',
+      'Debe planificarse antes de que empiece la semana congelada.',
     ],
   },
   {
@@ -68,14 +69,15 @@ const sections = [
   },
   {
     icon: '🤖',
-    title: 'Juez IA',
+    title: 'Juez IA (justificación por sesión)',
     color: 'purple',
     items: [
       'Si no puedes cumplir por un imprevisto (enfermedad súbita, emergencia familiar, etc.), puedes presentar una justificación.',
+      `Indicas cuántas sesiones quieres justificar (1, 2 o ${WEEKLY_GOAL}).`,
+      `Si justificas menos del total, debes completar las restantes para evitar la multa. Ej: hiciste 1, justificas 1 → debes completar la última.`,
       'La IA evalúa tu excusa de forma estricta e imparcial.',
       'Solo se aceptan situaciones genuinamente imprevistas — con evidencia (foto, certificado médico).',
       '"No tuve tiempo", viajes planificados o cansancio NO son aceptados.',
-      'Si la justificación es aceptada, la semana se congela sin multa.',
     ],
   },
   {
