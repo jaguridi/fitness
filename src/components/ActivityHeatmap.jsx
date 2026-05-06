@@ -40,7 +40,7 @@ export default function ActivityHeatmap({ userId }) {
       <div className="px-4 py-3 border-b border-gray-700">
         <div className="flex items-center gap-2">
           <span className="text-lg">📊</span>
-          <h3 className="font-bold text-white text-sm">Actividad</h3>
+          <h3 className="font-bold text-white text-sm">Actividad (minutos por día)</h3>
         </div>
       </div>
       <div className="p-4 overflow-x-auto">
@@ -73,17 +73,19 @@ export default function ActivityHeatmap({ userId }) {
               {week.map((day, di) => (
                 <div
                   key={di}
-                  title={day.date ? `${day.date}: ${day.count} sesión(es)` : ''}
+                  title={day.date ? `${day.date}: ${day.minutes} min (${day.sessions} ses.)` : ''}
                   className={`w-[12px] h-[12px] rounded-sm ${
                     !day.date
                       ? 'bg-transparent'
-                      : day.count === 0
+                      : day.minutes === 0
                       ? 'bg-gray-700/60'
-                      : day.count === 1
-                      ? 'bg-green-800'
-                      : day.count === 2
-                      ? 'bg-green-600'
-                      : 'bg-green-400'
+                      : day.minutes <= 30
+                      ? 'bg-green-900'
+                      : day.minutes <= 60
+                      ? 'bg-green-700'
+                      : day.minutes <= 90
+                      ? 'bg-green-500'
+                      : 'bg-green-300'
                   }`}
                 />
               ))}
@@ -92,13 +94,17 @@ export default function ActivityHeatmap({ userId }) {
         </div>
 
         {/* Legend */}
-        <div className="flex items-center gap-2 mt-3 justify-end">
-          <span className="text-[10px] text-gray-500">Menos</span>
+        <div className="flex items-center gap-2 mt-3 justify-end flex-wrap">
+          <span className="text-[10px] text-gray-500">0 min</span>
           <div className="w-[12px] h-[12px] rounded-sm bg-gray-700/60" />
-          <div className="w-[12px] h-[12px] rounded-sm bg-green-800" />
-          <div className="w-[12px] h-[12px] rounded-sm bg-green-600" />
-          <div className="w-[12px] h-[12px] rounded-sm bg-green-400" />
-          <span className="text-[10px] text-gray-500">Más</span>
+          <span className="text-[10px] text-gray-500">≤30</span>
+          <div className="w-[12px] h-[12px] rounded-sm bg-green-900" />
+          <span className="text-[10px] text-gray-500">≤60</span>
+          <div className="w-[12px] h-[12px] rounded-sm bg-green-700" />
+          <span className="text-[10px] text-gray-500">≤90</span>
+          <div className="w-[12px] h-[12px] rounded-sm bg-green-500" />
+          <span className="text-[10px] text-gray-500">90+</span>
+          <div className="w-[12px] h-[12px] rounded-sm bg-green-300" />
         </div>
       </div>
     </div>
@@ -106,11 +112,13 @@ export default function ActivityHeatmap({ userId }) {
 }
 
 function buildGrid(workouts) {
-  // Count workouts per date
-  const countByDate = {}
+  // Sum minutes and count sessions per date
+  const minutesByDate = {}
+  const sessionsByDate = {}
   for (const w of workouts) {
     if (w.date) {
-      countByDate[w.date] = (countByDate[w.date] || 0) + 1
+      minutesByDate[w.date] = (minutesByDate[w.date] || 0) + (w.duration || 0)
+      sessionsByDate[w.date] = (sessionsByDate[w.date] || 0) + 1
     }
   }
 
@@ -141,9 +149,13 @@ function buildGrid(workouts) {
       const isFuture = cursor > today
 
       if (isFuture) {
-        week.push({ date: null, count: 0 })
+        week.push({ date: null, minutes: 0, sessions: 0 })
       } else {
-        week.push({ date: dateStr, count: countByDate[dateStr] || 0 })
+        week.push({
+          date: dateStr,
+          minutes: minutesByDate[dateStr] || 0,
+          sessions: sessionsByDate[dateStr] || 0,
+        })
       }
 
       cursor.setDate(cursor.getDate() + 1)

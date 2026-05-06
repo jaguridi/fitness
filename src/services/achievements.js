@@ -71,6 +71,82 @@ export const ACHIEVEMENTS = [
     check: ({ workouts }) => workouts.length >= 100,
   },
 
+  // ── Minutes-based ────────────────────────────────────────────
+  {
+    id: 'long_session_60',
+    name: 'Hora de Sudor',
+    description: 'Completa una sesión de 60+ minutos',
+    icon: '⏱️',
+    category: 'minutes',
+    check: ({ workouts }) => workouts.some((w) => (w.duration || 0) >= 60),
+  },
+  {
+    id: 'long_session_90',
+    name: 'Maratón',
+    description: 'Completa una sesión de 90+ minutos',
+    icon: '🏃‍♂️',
+    category: 'minutes',
+    check: ({ workouts }) => workouts.some((w) => (w.duration || 0) >= 90),
+  },
+  {
+    id: 'long_session_120',
+    name: 'Resistencia Pura',
+    description: 'Completa una sesión de 2+ horas',
+    icon: '🦾',
+    category: 'minutes',
+    check: ({ workouts }) => workouts.some((w) => (w.duration || 0) >= 120),
+  },
+  {
+    id: 'total_minutes_500',
+    name: '500 Minutos',
+    description: 'Acumula 500 minutos totales de ejercicio',
+    icon: '🎖️',
+    category: 'minutes',
+    check: ({ workouts }) => totalMinutes(workouts) >= 500,
+  },
+  {
+    id: 'total_minutes_2000',
+    name: 'Atleta Dedicado',
+    description: 'Acumula 2.000 minutos totales (33 horas)',
+    icon: '🏆',
+    category: 'minutes',
+    check: ({ workouts }) => totalMinutes(workouts) >= 2000,
+  },
+  {
+    id: 'total_minutes_5000',
+    name: 'Élite',
+    description: 'Acumula 5.000 minutos totales (83 horas)',
+    icon: '💎',
+    category: 'minutes',
+    check: ({ workouts }) => totalMinutes(workouts) >= 5000,
+  },
+  {
+    id: 'avg_intensity',
+    name: 'Intenso',
+    description: 'Promedio de 45+ min por sesión (mín. 10 sesiones)',
+    icon: '🔋',
+    category: 'minutes',
+    check: ({ workouts }) => {
+      if (workouts.length < 10) return false
+      return totalMinutes(workouts) / workouts.length >= 45
+    },
+  },
+  {
+    id: 'big_week_minutes',
+    name: 'Semana Brutal',
+    description: '300+ minutos en una sola semana',
+    icon: '⚡',
+    category: 'minutes',
+    check: ({ workouts }) => {
+      const byWeek = {}
+      for (const w of workouts) {
+        if (!w.weekId) continue
+        byWeek[w.weekId] = (byWeek[w.weekId] || 0) + (w.duration || 0)
+      }
+      return Object.values(byWeek).some((m) => m >= 300)
+    },
+  },
+
   // ── Variety-based ────────────────────────────────────────────
   {
     id: 'variety_3',
@@ -182,6 +258,10 @@ function getBestStreak(summaries) {
     }
   }
   return best
+}
+
+function totalMinutes(workouts) {
+  return workouts.reduce((sum, w) => sum + (w.duration || 0), 0)
 }
 
 function getUniqueExerciseTypes(workouts) {
