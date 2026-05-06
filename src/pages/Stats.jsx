@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { USERS, formatCLP, getAvatarForMood } from '../constants'
+import { USERS, formatCLP, getAvatarForMood, getExerciseTypes } from '../constants'
 import { getUserSummaries, getWorkoutsByUser } from '../services/firebaseService'
 import Avatar from '../components/Avatar'
 import { StatsSkeleton } from '../components/Skeleton'
@@ -113,6 +113,77 @@ export default function Stats({ gameState }) {
   const selAvgMins = selWorkouts.length > 0 ? Math.round(selTotalMins / selWorkouts.length) : 0
   const selLongest = selWorkouts.reduce((max, w) => Math.max(max, w.duration || 0), 0)
 
+  // ── Family aggregates ───────────────────────────────────────
+  const familyTotals = USERS.reduce((acc, u) => {
+    const wks = allWorkouts[u.id] || []
+    const fu = users.find((fu) => fu.id === u.id) || {}
+    acc.totalSessions += wks.length
+    acc.totalMinutes += wks.reduce((s, w) => s + (w.duration || 0), 0)
+    acc.totalFines += fu.walletBalance || 0
+    return acc
+  }, { totalSessions: 0, totalMinutes: 0, totalFines: 0 })
+
+  // Top exercise type across the whole family
+  const familyTypeCounts = {}
+  USERS.forEach((u) => {
+    (allWorkouts[u.id] || []).forEach((w) => {
+      getExerciseTypes(w).forEach((t) => {
+        familyTypeCounts[t] = (familyTypeCounts[t] || 0) + 1
+      })
+    })
+  })
+  const familyTopExercise = Object.entries(familyTypeCounts).sort((a, b) => b[1] - a[1])[0]
+
+  // ── Multi-user weekly comparison chart ──────────────────────
+  // Build a map of weekId -> { userId: sessions } for the last CHART_WEEKS weeks
+  const allWeekIds = new Set()
+  USERS.forEach((u) => {
+    (summaries[u.id] || []).forEach((s) => allWeekIds.add(s.weekId))
+  })
+  const sortedWeekIds = [...allWeekIds].sort().slice(-CHART_WEEKS)
+  const weekColors = {
+    user1: '#6366f1', // indigo
+    user2: '#ec4899', // pink
+    user3: '#10b981', // emerald
+    user4: '#f59e0b', // amber
+  }
+  const comparisonData = sortedWeekIds.map((wid) => {
+    const point = { weekId: wid }
+    USERS.forEach((u) => {
+      const s = (summaries[u.id] || []).find((x) => x.weekId === wid)
+      point[u.id] = s ? (s.sessions || 0) : 0
+    })
+    return point
+  })
+  const comparisonMax = Math.max(
+    ...comparisonData.flatMap((d) => USERS.map((u) => d[u.id])),
+    3,
+  )
+
+  // ── Exercise types per user (top 3) ─────────────────────────
+  const exerciseDistribution = USERS.map((u) => {
+    const counts = {}
+    ;(allWorkouts[u.id] || []).forEach((w) => {
+      getExerciseTypes(w).forEach((t) => {
+        counts[t] = (counts[t] || 0) + 1
+      })
+    })
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1])
+    const total = sorted.reduce((s, [, c]) => s + c, 0)
+    const userConst = USERS.find((c) => c.id === u.id)
+    const fu = users.find((x) => x.id === u.id) || {}
+    return {
+      ...u,
+      avatar: getAvatarForMood(userConst, fu),
+      top3: sorted.slice(0, 3).map(([type, count]) => ({
+        type,
+        count,
+        pct: total > 0 ? Math.round((count / total) * 100) : 0,
+      })),
+      total,
+    }
+  })
+
   if (loading) {
     return (
       <div className="space-y-4 pb-24">
@@ -130,6 +201,37 @@ export default function Stats({ gameState }) {
       <div className="text-center">
         <h2 className="text-2xl font-black text-white">📊 Estadísticas</h2>
         <p className="text-sm text-gray-400 mt-1">Rendimiento familiar</p>
+      </div>
+
+      {/* ── Family overview ─────────────────────────────────── */}
+      <div className="bg-gradient-to-br from-indigo-900/30 to-purple-900/30 rounded-2xl border border-indigo-700/30 overflow-hidden">
+        <div className="px-4 py-3 border-b border-indigo-700/30">
+          <h3 className="font-bold text-white text-sm">👨‍👩‍👧‍👦 Total familia</h3>
+        </div>
+        <div className="grid grid-cols-2 gap-px bg-indigo-900/20">
+          <div className="bg-gray-800/60 p-3 text-center">
+            <p className="text-2xl font-bold text-white">{familyTotals.totalSessions}</p>
+            <p className="text-xs text-gray-400">Sesiones totales</p>
+          </div>
+          <div className="bg-gray-800/60 p-3 text-center">
+            <p className="text-2xl font-bold text-cyan-400">
+              {Math.floor(familyTotals.totalMinutes / 60)}h
+            </p>
+            <p className="text-xs text-gray-400">Horas acumuladas</p>
+          </div>
+          <div className="bg-gray-800/60 p-3 text-center">
+            <p className="text-lg font-bold text-red-400">{formatCLP(familyTotals.totalFines)}</p>
+            <p className="text-xs text-gray-400">Multas pagadas</p>
+          </div>
+          <div className="bg-gray-800/60 p-3 text-center">
+            <p className="text-lg font-bold text-amber-400">
+              {familyTopExercise ? familyTopExercise[0] : '—'}
+            </p>
+            <p className="text-xs text-gray-400">
+              Deporte favorito {familyTopExercise && `(${familyTopExercise[1]}×)`}
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* ── Leaderboard ─────────────────────────────────────── */}
@@ -238,6 +340,100 @@ export default function Stats({ gameState }) {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* ── Multi-user weekly comparison ─────────────────────── */}
+      <div className="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-700">
+          <h3 className="font-bold text-white text-sm">📈 Comparación semanal</h3>
+          <p className="text-xs text-gray-500 mt-0.5">Sesiones por semana — todos los miembros</p>
+        </div>
+        <div className="p-4">
+          {comparisonData.length === 0 ? (
+            <p className="text-gray-500 text-sm text-center py-6">Sin historial aún</p>
+          ) : (
+            <>
+              {/* Legend */}
+              <div className="flex flex-wrap gap-3 mb-3">
+                {USERS.map((u) => (
+                  <div key={u.id} className="flex items-center gap-1.5">
+                    <span
+                      className="w-2.5 h-2.5 rounded-full"
+                      style={{ backgroundColor: weekColors[u.id] }}
+                    />
+                    <span className="text-xs text-gray-400">{u.name}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Grouped bar chart */}
+              <div
+                className="flex items-end justify-between gap-2 mb-2"
+                style={{ height: '120px' }}
+              >
+                {comparisonData.map((d) => (
+                  <div key={d.weekId} className="flex-1 flex flex-col items-center gap-1">
+                    <div className="flex items-end gap-px w-full justify-center" style={{ height: '100px' }}>
+                      {USERS.map((u) => {
+                        const val = d[u.id] || 0
+                        const h = Math.max(2, Math.round((val / comparisonMax) * 100))
+                        return (
+                          <div
+                            key={u.id}
+                            title={`${u.name}: ${val} ses.`}
+                            className="flex-1 rounded-t-sm transition-all"
+                            style={{ height: `${h}%`, backgroundColor: weekColors[u.id], minWidth: '4px' }}
+                          />
+                        )
+                      })}
+                    </div>
+                    <span className="text-[10px] text-gray-600">
+                      W{d.weekId.split('-W')[1]}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Exercise distribution comparison ─────────────────── */}
+      <div className="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-700">
+          <h3 className="font-bold text-white text-sm">🎯 Top ejercicios por persona</h3>
+          <p className="text-xs text-gray-500 mt-0.5">Los 3 deportes más practicados</p>
+        </div>
+        <div className="divide-y divide-gray-700/50">
+          {exerciseDistribution.map((u) => (
+            <div key={u.id} className="px-4 py-3 flex items-center gap-3">
+              <Avatar src={u.avatar} name={u.name} size="sm" />
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-white text-sm mb-1">{u.name}</p>
+                {u.top3.length === 0 ? (
+                  <p className="text-xs text-gray-500">Sin actividad aún</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {u.top3.map((t, i) => (
+                      <span
+                        key={t.type}
+                        className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                          i === 0
+                            ? 'bg-amber-600/25 text-amber-300'
+                            : i === 1
+                            ? 'bg-gray-600/40 text-gray-300'
+                            : 'bg-orange-700/25 text-orange-300'
+                        }`}
+                      >
+                        {i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'} {t.type} ({t.count})
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* ── Per-user detail ──────────────────────────────────── */}
