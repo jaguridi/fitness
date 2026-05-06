@@ -95,8 +95,10 @@ async function runWeekEnd(weekId, fetchedUsers, fetchedAbsences) {
         shieldEarned = true
       }
     } else {
+      // Accept justification if AI approved, human vote approved, OR still pending vote
+      // (pending_vote = AI failed, give benefit of the doubt)
       const justification = weekJustifications.find(
-        (j) => j.userId === u.id && j.aiVerdict === true
+        (j) => j.userId === u.id && (j.aiVerdict === true || j.status === 'pending_vote')
       )
       if (justification) {
         consecutiveSuccesses = 0
@@ -124,7 +126,7 @@ async function runWeekEnd(weekId, fetchedUsers, fetchedAbsences) {
     })
 
     const justifiedThisWeek = weekJustifications.find(
-      (j) => j.userId === u.id && j.aiVerdict === true
+      (j) => j.userId === u.id && (j.aiVerdict === true || j.status === 'pending_vote')
     )
     let weekStatus = 'completed'
     if (fineApplied > 0) weekStatus = 'missed'

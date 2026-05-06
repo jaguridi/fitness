@@ -75,10 +75,17 @@ export default function WeeklyHistory() {
         <div className="space-y-2 max-h-80 overflow-y-auto">
           {summaries.map((s) => {
             const st = statusLabel(s.status)
+            const bgClass = s.status === 'justified'
+              ? 'bg-amber-900/20 border border-amber-700/30'
+              : s.status === 'frozen'
+              ? 'bg-blue-900/20 border border-blue-700/30'
+              : s.status === 'missed'
+              ? 'bg-red-900/20 border border-red-700/30'
+              : 'bg-gray-900/50'
             return (
               <div
                 key={s.id}
-                className="flex items-center justify-between bg-gray-900/50 rounded-xl px-3 py-2"
+                className={`flex items-center justify-between rounded-xl px-3 py-2 ${bgClass}`}
               >
                 <div>
                   <p className="text-sm font-medium text-white">

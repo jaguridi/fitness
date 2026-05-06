@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { USERS, formatCLP, getAvatarForMood } from '../constants'
 import { getUserSummaries } from '../services/firebaseService'
 import Avatar from '../components/Avatar'
+import { StatsSkeleton } from '../components/Skeleton'
 
 const MAX_BAR_H = 72 // px — max bar height in the chart
 const CHART_WEEKS = 8
@@ -86,11 +87,12 @@ export default function Stats({ gameState }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="space-y-4 pb-24">
         <div className="text-center">
-          <div className="text-4xl mb-2 animate-bounce">📊</div>
-          <p className="text-gray-400">Cargando estadísticas...</p>
+          <h2 className="text-2xl font-black text-white">📊 Estadísticas</h2>
+          <p className="text-sm text-gray-400 mt-1">Rendimiento familiar</p>
         </div>
+        <StatsSkeleton />
       </div>
     )
   }
@@ -201,9 +203,16 @@ export default function Stats({ gameState }) {
                   const barH = Math.max(4, Math.round((s.sessions / maxSessions) * MAX_BAR_H))
                   const color = barColor(s.status, s.lifeUsed)
                   const weekNum = s.weekId.split('-W')[1]
+                  const icon = s.status === 'justified' ? '⚖️'
+                    : s.status === 'frozen' ? '❄️'
+                    : s.lifeUsed ? '❤️'
+                    : null
                   return (
                     <div key={s.weekId} className="flex-1 flex flex-col items-center gap-0.5">
-                      <span className="text-xs text-gray-500">{s.sessions}</span>
+                      {icon
+                        ? <span className="text-xs leading-none">{icon}</span>
+                        : <span className="text-xs text-gray-500">{s.sessions}</span>
+                      }
                       <div
                         className={`w-full rounded-t-sm ${color}`}
                         style={{ height: `${barH}px` }}

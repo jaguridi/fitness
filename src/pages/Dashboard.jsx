@@ -1,23 +1,39 @@
-import { useState, useEffect, useRef } from 'react'
-import { USERS } from '../constants'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { USERS, WEEKLY_GOAL, EXTRA_LIFE_THRESHOLD } from '../constants'
 import { formatWeekLabel } from '../hooks/useWeekId'
 import { useAuth } from '../context/AuthContext'
-import { getJustification } from '../services/firebaseService'
+import { getJustification, getJustificationsForWeek, subscribePendingJustifications } from '../services/firebaseService'
 import UserCard from '../components/UserCard'
 import PotCounter from '../components/PotCounter'
 import WallOfShame from '../components/WallOfShame'
 import WorkoutLogger from '../components/WorkoutLogger'
 import JustificationModal from '../components/JustificationModal'
+import JustificationVoteCard from '../components/JustificationVoteCard'
 import EasterEgg from '../components/EasterEgg'
 import MiniGame from '../components/MiniGame'
+import WeeklyRecap from '../components/WeeklyRecap'
+import Confetti from '../components/Confetti'
+import { DashboardSkeleton } from '../components/Skeleton'
 
 export default function Dashboard({ gameState }) {
   const { currentUser } = useAuth()
   const [showLogger, setShowLogger] = useState(false)
+  const [celebration, setCelebration] = useState(null) // 'goal' | 'life' | 'shield' | 'overachiever' | null
   const [showJustification, setShowJustification] = useState(false)
   const [existingJustification, setExistingJustification] = useState(null) // null = no justification, object = existing
   const [showEasterEgg, setShowEasterEgg] = useState(false)
   const [showMiniGame, setShowMiniGame] = useState(false)
+  const [pendingJustifications, setPendingJustifications] = useState([])
+  const [weekJustifications, setWeekJustifications] = useState([])
+
+  // Subscribe to pending justification votes
+  useEffect(() => {
+    const unsub = subscribePendingJustifications(
+      (data) => setPendingJustifications(data),
+      (err) => console.error('pending justifications error:', err)
+    )
+    return unsub
+  }, [])
 
   // Easter egg: tap "FitFamily" heading 7 times within 3 seconds
   const eggTaps = useRef(0)
@@ -52,9 +68,34 @@ export default function Dashboard({ gameState }) {
     totalPot,
     currentWeekId,
     getUserWeekStatus,
+    getSessionCount,
+    getRecoverySessions,
+    isWeekFrozen,
     loading,
     error,
   } = gameState
+
+  // Detect celebration type after logging a workout
+  const detectCelebration = useCallback(() => {
+    if (!currentUser) return
+    const sessions = getSessionCount(currentUser.id) + 1 // +1 for the just-logged one
+    const recovery = getRecoverySessions(currentUser.id)
+    const frozen = isWeekFrozen(currentUser.id)
+    if (frozen) return
+
+    const totalRequired = WEEKLY_GOAL + recovery
+    const user = users.find((u) => u.id === currentUser.id)
+    const consecutiveSuccesses = (user?.consecutiveSuccesses || 0)
+
+    if (sessions >= EXTRA_LIFE_THRESHOLD + recovery) {
+      setCelebration('overachiever')
+    } else if (sessions === totalRequired && consecutiveSuccesses >= 3) {
+      // Will earn shield at week-end (4th consecutive success)
+      setCelebration('shield')
+    } else if (sessions === totalRequired) {
+      setCelebration('goal')
+    }
+  }, [currentUser, getSessionCount, getRecoverySessions, isWeekFrozen, users])
 
   // Check if current user already submitted a justification for this week
   useEffect(() => {
@@ -64,6 +105,13 @@ export default function Dashboard({ gameState }) {
       }).catch(() => {})
     }
   }, [currentUser?.id, currentWeekId])
+
+  // Load all justifications for the current week (for UserCard badges)
+  useEffect(() => {
+    if (currentWeekId) {
+      getJustificationsForWeek(currentWeekId).then(setWeekJustifications).catch(() => {})
+    }
+  }, [currentWeekId, existingJustification])
 
   // Refresh justification after modal closes
   const refreshJustification = () => {
@@ -76,11 +124,12 @@ export default function Dashboard({ gameState }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="space-y-4 pb-24">
         <div className="text-center">
-          <div className="text-4xl mb-2 animate-bounce">💪</div>
-          <p className="text-gray-400">Cargando...</p>
+          <h2 className="text-2xl font-black text-white">FitFamily</h2>
+          <p className="text-sm text-gray-400 mt-1">📅 Cargando semana...</p>
         </div>
+        <DashboardSkeleton />
       </div>
     )
   }
@@ -125,10 +174,17 @@ export default function Dashboard({ gameState }) {
         <PotCounter total={totalPot} />
       </div>
 
+      {/* AI Weekly Recap */}
+      <WeeklyRecap currentWeekId={currentWeekId} />
+
       {/* User cards */}
       <div className="space-y-3">
         {statuses.map((status) => (
-          <UserCard key={status.userId} status={status} />
+          <UserCard
+            key={status.userId}
+            status={status}
+            justification={weekJustifications.find((j) => j.userId === status.userId)}
+          />
         ))}
       </div>
 
@@ -157,8 +213,18 @@ export default function Dashboard({ gameState }) {
           )
         }
 
-        // Has justification that was REJECTED → offer to appeal
-        if (!existingJustification.aiVerdict) {
+        // Pending vote → show voting status
+        if (existingJustification.status === 'pending_vote') {
+          return (
+            <JustificationVoteCard
+              justification={existingJustification}
+              currentUserId={currentUser.id}
+            />
+          )
+        }
+
+        // Has justification that was REJECTED (by AI or by vote) → offer to appeal
+        if (existingJustification.aiVerdict === false) {
           return (
             <button
               onClick={() => setShowJustification(true)}
@@ -181,12 +247,28 @@ export default function Dashboard({ gameState }) {
         }
 
         // Has justification that was ACCEPTED → show confirmation
-        return (
-          <div className="bg-green-900/10 border border-green-700/20 rounded-2xl p-3 text-center">
-            <p className="text-green-400 text-sm">✅ Justificación aceptada — multa congelada esta semana</p>
-          </div>
-        )
+        if (existingJustification.aiVerdict === true) {
+          return (
+            <div className="bg-green-900/10 border border-green-700/20 rounded-2xl p-3 text-center">
+              <p className="text-green-400 text-sm">✅ Justificación aceptada — multa congelada esta semana</p>
+            </div>
+          )
+        }
+
+        return null
       })()}
+
+      {/* Pending justification votes from other family members */}
+      {currentUser && pendingJustifications
+        .filter((j) => j.userId !== currentUser.id)
+        .map((j) => (
+          <JustificationVoteCard
+            key={j.id}
+            justification={j}
+            currentUserId={currentUser.id}
+          />
+        ))
+      }
 
       {/* Wall of shame */}
       <WallOfShame users={users} />
@@ -204,15 +286,23 @@ export default function Dashboard({ gameState }) {
       {showLogger && (
         <WorkoutLogger
           onClose={() => setShowLogger(false)}
-          onSuccess={() => setShowLogger(false)}
+          onSuccess={() => {
+            detectCelebration()
+            setShowLogger(false)
+          }}
         />
+      )}
+
+      {/* Confetti celebration */}
+      {celebration && (
+        <Confetti type={celebration} onDone={() => setCelebration(null)} />
       )}
 
       {/* Justification Modal */}
       {showJustification && (
         <JustificationModal
           weekId={currentWeekId}
-          existing={existingJustification?.aiVerdict === false ? existingJustification : null}
+          existing={existingJustification?.aiVerdict === false || existingJustification?.status === 'pending_vote' ? existingJustification : null}
           onClose={() => {
             setShowJustification(false)
             refreshJustification()

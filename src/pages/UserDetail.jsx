@@ -3,6 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { USERS, formatCLP } from '../constants'
 import { getWorkoutsByUser } from '../services/firebaseService'
 import Avatar from '../components/Avatar'
+import AchievementBadges from '../components/AchievementBadges'
+import PersonalBests from '../components/PersonalBests'
+import ActivityHeatmap from '../components/ActivityHeatmap'
+import { UserDetailSkeleton } from '../components/Skeleton'
 
 export default function UserDetail({ gameState }) {
   const { userId } = useParams()
@@ -81,6 +85,15 @@ export default function UserDetail({ gameState }) {
         </div>
       </div>
 
+      {/* Achievements */}
+      <AchievementBadges userId={userId} user={userFirestore} mode="full" />
+
+      {/* Personal Bests */}
+      <PersonalBests userId={userId} />
+
+      {/* Activity Heatmap */}
+      <ActivityHeatmap userId={userId} />
+
       {/* Workouts count */}
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-bold text-white">
@@ -90,9 +103,19 @@ export default function UserDetail({ gameState }) {
 
       {/* Workouts list */}
       {loading ? (
-        <div className="text-center py-8">
-          <div className="text-3xl mb-2 animate-bounce">💪</div>
-          <p className="text-gray-400">Cargando entrenamientos...</p>
+        <div className="space-y-4">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="bg-gray-800 rounded-2xl overflow-hidden border border-gray-700">
+              <div className="animate-pulse bg-gray-700 w-full h-48 rounded-none" />
+              <div className="p-4 space-y-2">
+                <div className="flex justify-between">
+                  <div className="animate-pulse bg-gray-700 h-5 w-16 rounded-full" />
+                  <div className="animate-pulse bg-gray-700 h-4 w-14 rounded" />
+                </div>
+                <div className="animate-pulse bg-gray-700 h-3 w-24 rounded" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : workouts.length === 0 ? (
         <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700 text-center">
@@ -114,6 +137,7 @@ export default function UserDetail({ gameState }) {
                   <img
                     src={w.photoURL}
                     alt={w.exerciseType}
+                    loading="lazy"
                     className="w-full h-64 object-cover hover:opacity-90 transition-opacity"
                   />
                 </button>

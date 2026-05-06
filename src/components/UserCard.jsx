@@ -1,9 +1,16 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { formatCLP } from '../constants'
+import { useAuth } from '../context/AuthContext'
+import { sendNudge } from '../services/firebaseService'
 import Avatar from './Avatar'
+import AchievementBadges from './AchievementBadges'
 
-export default function UserCard({ status }) {
+export default function UserCard({ status, justification }) {
   const navigate = useNavigate()
+  const { currentUser } = useAuth()
+  const [nudging, setNudging] = useState(false)
+  const [nudgeMsg, setNudgeMsg] = useState(null)
 
   if (!status) return null
   const { userId, user, sessions, totalRequired, frozen, goalMet, progress, canEarnLife } = status
@@ -22,8 +29,9 @@ export default function UserCard({ status }) {
         <Avatar src={user.avatar} name={user.name} size="md" hasShield={user.hasShield} />
         <div className="flex-1">
           <h3 className="font-bold text-lg text-white">{user.name}</h3>
-          <div className="text-sm">
-            {hearts}{emptyHearts}
+          <div className="flex items-center gap-2 text-sm">
+            <span>{hearts}{emptyHearts}</span>
+            <AchievementBadges userId={userId} user={user} mode="compact" />
           </div>
         </div>
         {frozen && (
@@ -34,6 +42,21 @@ export default function UserCard({ status }) {
         {goalMet && !frozen && (
           <span className="bg-green-600/20 text-green-400 text-xs font-semibold px-2 py-1 rounded-full">
             ✅ Meta
+          </span>
+        )}
+        {!frozen && !goalMet && justification?.aiVerdict === true && (
+          <span className="bg-amber-600/20 text-amber-400 text-xs font-semibold px-2 py-1 rounded-full">
+            ⚖️ Justificada
+          </span>
+        )}
+        {!frozen && !goalMet && justification?.status === 'pending_vote' && (
+          <span className="bg-amber-600/20 text-amber-400 text-xs font-semibold px-2 py-1 rounded-full animate-pulse">
+            🗳️ En votación
+          </span>
+        )}
+        {!frozen && !goalMet && justification?.aiVerdict === false && justification?.status !== 'pending_vote' && (
+          <span className="bg-red-600/20 text-red-400 text-xs font-semibold px-2 py-1 rounded-full">
+            ❌ Rechazada
           </span>
         )}
       </div>
@@ -79,6 +102,35 @@ export default function UserCard({ status }) {
           )}
         </div>
       </div>
+
+      {/* Nudge button — show for other users who haven't met goal */}
+      {currentUser && currentUser.id !== userId && !goalMet && !frozen && (
+        <div className="mt-2 pt-2 border-t border-gray-700/50">
+          {nudgeMsg ? (
+            <p className={`text-xs text-center ${nudgeMsg.ok ? 'text-green-400' : 'text-amber-400'}`}>
+              {nudgeMsg.text}
+            </p>
+          ) : (
+            <button
+              disabled={nudging}
+              onClick={(e) => {
+                e.stopPropagation()
+                setNudging(true)
+                sendNudge(userId, currentUser.name)
+                  .then(() => setNudgeMsg({ ok: true, text: '👊 ¡Empujón enviado!' }))
+                  .catch((err) => setNudgeMsg({ ok: false, text: err.message }))
+                  .finally(() => {
+                    setNudging(false)
+                    setTimeout(() => setNudgeMsg(null), 4000)
+                  })
+              }}
+              className="w-full py-1.5 rounded-xl text-xs font-semibold bg-amber-600/15 text-amber-400 hover:bg-amber-600/25 transition-all active:scale-95 flex items-center justify-center gap-1.5"
+            >
+              {nudging ? '⏳ Enviando...' : '👊 Enviar empujón'}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }

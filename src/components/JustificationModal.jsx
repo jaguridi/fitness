@@ -70,13 +70,22 @@ export default function JustificationModal({ weekId, existing = null, onClose, o
         evidencePhotoURL = await uploadJustificationPhoto(photo, currentUser.id, weekId)
       }
 
+      // Determine save fields based on whether AI succeeded or failed
+      const isAiError = aiResult.aiError === true
+      const justificationData = {
+        excuse: excuse.trim(),
+        evidencePhotoURL,
+        aiVerdict: isAiError ? null : aiResult.valid,
+        aiReason: aiResult.reason,
+        ...(isAiError
+          ? { status: 'pending_vote', votes: {} }
+          : { status: 'resolved' }),
+      }
+
       if (isAppeal && existing.id) {
         // 3a. Update existing justification (appeal)
         await updateJustification(existing.id, {
-          excuse: excuse.trim(),
-          evidencePhotoURL,
-          aiVerdict: aiResult.valid,
-          aiReason: aiResult.reason,
+          ...justificationData,
           appealCount: (existing.appealCount || 0) + 1,
         })
       } else {
@@ -84,10 +93,7 @@ export default function JustificationModal({ weekId, existing = null, onClose, o
         await addJustification({
           userId: currentUser.id,
           weekId,
-          excuse: excuse.trim(),
-          evidencePhotoURL,
-          aiVerdict: aiResult.valid,
-          aiReason: aiResult.reason,
+          ...justificationData,
           appealCount: 0,
         })
       }
@@ -230,26 +236,39 @@ export default function JustificationModal({ weekId, existing = null, onClose, o
             <div className="space-y-4">
               <div
                 className={`rounded-2xl p-4 border-2 text-center ${
-                  verdict.valid
+                  verdict.aiError
+                    ? 'bg-amber-900/20 border-amber-500/50'
+                    : verdict.valid
                     ? 'bg-green-900/20 border-green-500/50'
                     : 'bg-red-900/20 border-red-500/50'
                 }`}
               >
                 <div className="text-4xl mb-2">
-                  {verdict.valid ? '✅' : '❌'}
+                  {verdict.aiError ? '🗳️' : verdict.valid ? '✅' : '❌'}
                 </div>
-                <h3 className={`text-lg font-bold ${verdict.valid ? 'text-green-400' : 'text-red-400'}`}>
-                  {verdict.valid ? 'Justificación Aceptada' : 'Justificación Rechazada'}
+                <h3 className={`text-lg font-bold ${
+                  verdict.aiError
+                    ? 'text-amber-400'
+                    : verdict.valid ? 'text-green-400' : 'text-red-400'
+                }`}>
+                  {verdict.aiError
+                    ? 'Enviada a Votación Familiar'
+                    : verdict.valid ? 'Justificación Aceptada' : 'Justificación Rechazada'}
                 </h3>
                 <p className="text-gray-300 text-sm mt-2">
                   {verdict.reason}
                 </p>
-                {verdict.valid && (
+                {verdict.aiError && (
+                  <p className="text-amber-400/70 text-xs mt-2">
+                    Los demás miembros de la familia votarán si aprueban o rechazan tu justificación.
+                  </p>
+                )}
+                {!verdict.aiError && verdict.valid && (
                   <p className="text-green-400/70 text-xs mt-2">
                     La multa se congela esta semana (no se cobra, pero no cuenta como semana exitosa).
                   </p>
                 )}
-                {!verdict.valid && (
+                {!verdict.aiError && !verdict.valid && (
                   <p className="text-red-400/70 text-xs mt-2">
                     Se aplicará la multa correspondiente.
                   </p>
@@ -271,7 +290,7 @@ export default function JustificationModal({ weekId, existing = null, onClose, o
 
               {/* Action buttons */}
               <div className="flex gap-3">
-                {!verdict.valid && (
+                {!verdict.valid && !verdict.aiError && (
                   <button
                     onClick={handleAppealAgain}
                     className="flex-1 py-3 rounded-xl font-bold bg-amber-600 hover:bg-amber-500 text-white transition-all active:scale-95"
@@ -281,7 +300,7 @@ export default function JustificationModal({ weekId, existing = null, onClose, o
                 )}
                 <button
                   onClick={onClose}
-                  className={`${!verdict.valid ? 'flex-1' : 'w-full'} py-3 rounded-xl font-bold bg-gray-700 hover:bg-gray-600 text-white transition-all`}
+                  className={`${!verdict.valid && !verdict.aiError ? 'flex-1' : 'w-full'} py-3 rounded-xl font-bold bg-gray-700 hover:bg-gray-600 text-white transition-all`}
                 >
                   Cerrar
                 </button>

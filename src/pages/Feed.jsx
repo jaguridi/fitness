@@ -11,8 +11,10 @@ import {
   deleteWorkout,
   addReaction,
   removeReaction,
+  addComment,
 } from '../services/firebaseService'
 import Avatar from '../components/Avatar'
+import { FeedCardSkeleton } from '../components/Skeleton'
 
 export default function Feed() {
   const { currentUser } = useAuth()
@@ -99,6 +101,24 @@ export default function Feed() {
     }
   }
 
+  // ── Comments ────────────────────────────────────────────────
+  const [commentText, setCommentText] = useState({}) // { workoutId: text }
+  const [submittingComment, setSubmittingComment] = useState(null)
+
+  const handleComment = async (workoutId) => {
+    const text = (commentText[workoutId] || '').trim()
+    if (!text || !currentUser) return
+    setSubmittingComment(workoutId)
+    try {
+      await addComment(workoutId, currentUser.id, text)
+      setCommentText((prev) => ({ ...prev, [workoutId]: '' }))
+    } catch (err) {
+      console.error('Comment error:', err)
+    } finally {
+      setSubmittingComment(null)
+    }
+  }
+
   // ── Reactions ───────────────────────────────────────────────
   const REACTION_EMOJIS = ['💪', '🔥', '👏', '😮', '😂']
 
@@ -121,11 +141,12 @@ export default function Feed() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="space-y-4 pb-24">
         <div className="text-center">
-          <div className="text-4xl mb-2 animate-bounce">📸</div>
-          <p className="text-gray-400">Cargando feed...</p>
+          <h2 className="text-2xl font-black text-white">📸 Feed</h2>
+          <p className="text-sm text-gray-400 mt-1">Actividad de toda la familia</p>
         </div>
+        {[...Array(3)].map((_, i) => <FeedCardSkeleton key={i} />)}
       </div>
     )
   }
@@ -144,64 +165,85 @@ export default function Feed() {
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Justification cards */}
-          {justifications.map((j) => {
-            const user = getUserInfo(j.userId)
-            return (
-              <div
-                key={`j-${j.id}`}
-                className={`rounded-2xl overflow-hidden border ${
-                  j.aiVerdict
-                    ? 'bg-amber-900/10 border-amber-700/30'
-                    : 'bg-red-900/10 border-red-700/30'
-                }`}
-              >
-                <div className="flex items-center gap-3 p-3">
-                  <Avatar src={user.avatar} name={user.name} size="sm" />
-                  <div className="flex-1">
-                    <p className="font-semibold text-white text-sm">{user.name}</p>
-                    <p className="text-gray-500 text-xs">{formatTimeAgo(j.createdAt)}</p>
-                  </div>
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                    j.aiVerdict
-                      ? 'bg-amber-600/20 text-amber-400'
-                      : 'bg-red-600/20 text-red-400'
-                  }`}>
-                    {j.aiVerdict ? '⚖️ Aceptada' : '❌ Rechazada'}
-                  </span>
-                </div>
+          {/* Merge workouts and justifications into a single timeline */}
+          {[
+            ...workouts.map((w) => ({ ...w, _type: 'workout', _ts: w.createdAt?.seconds || 0 })),
+            ...justifications.map((j) => ({ ...j, _type: 'justification', _ts: j.createdAt?.seconds || 0 })),
+          ]
+            .sort((a, b) => b._ts - a._ts)
+            .map((item) => {
+              if (item._type === 'justification') {
+                const j = item
+                const user = getUserInfo(j.userId)
+                const isPending = j.status === 'pending_vote'
+                const borderClass = isPending
+                  ? 'bg-amber-900/10 border-amber-700/30'
+                  : j.aiVerdict === true
+                  ? 'bg-green-900/10 border-green-700/30'
+                  : 'bg-red-900/10 border-red-700/30'
+                const badgeClass = isPending
+                  ? 'bg-amber-600/20 text-amber-400'
+                  : j.aiVerdict === true
+                  ? 'bg-green-600/20 text-green-400'
+                  : 'bg-red-600/20 text-red-400'
+                const badgeText = isPending
+                  ? '🗳️ En votación'
+                  : j.aiVerdict === true
+                  ? '⚖️ Aceptada'
+                  : '❌ Rechazada'
 
-                {/* Evidence photo */}
-                {j.evidencePhotoURL && (
-                  <button
-                    onClick={() => setFullscreenPhoto(j.evidencePhotoURL)}
-                    className="w-full"
+                return (
+                  <div
+                    key={`j-${j.id}`}
+                    className={`rounded-2xl overflow-hidden border ${borderClass}`}
                   >
-                    <img
-                      src={j.evidencePhotoURL}
-                      alt="Evidencia"
-                      className="w-full max-h-64 object-cover hover:opacity-90 transition-opacity"
-                    />
-                  </button>
-                )}
+                    <div className="flex items-center gap-3 p-3">
+                      <Avatar src={user.avatar} name={user.name} size="sm" />
+                      <div className="flex-1">
+                        <p className="font-semibold text-white text-sm">{user.name}</p>
+                        <p className="text-gray-500 text-xs">{formatTimeAgo(j.createdAt)}</p>
+                      </div>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badgeClass}`}>
+                        {badgeText}
+                      </span>
+                    </div>
 
-                <div className="p-3">
-                  <p className="text-gray-300 text-sm">
-                    <span className="font-semibold text-white">{user.name}:</span>{' '}
-                    &ldquo;{j.excuse}&rdquo;
-                  </p>
-                  <div className={`mt-2 text-xs px-2 py-1 rounded-lg inline-block ${
-                    j.aiVerdict ? 'bg-amber-900/30 text-amber-300' : 'bg-red-900/30 text-red-300'
-                  }`}>
-                    🤖 {j.aiReason}
+                    {/* Evidence photo */}
+                    {j.evidencePhotoURL && (
+                      <button
+                        onClick={() => setFullscreenPhoto(j.evidencePhotoURL)}
+                        className="w-full"
+                      >
+                        <img
+                          src={j.evidencePhotoURL}
+                          alt="Evidencia"
+                          loading="lazy"
+                          className="w-full max-h-64 object-cover hover:opacity-90 transition-opacity"
+                        />
+                      </button>
+                    )}
+
+                    <div className="p-3">
+                      <p className="text-gray-300 text-sm">
+                        <span className="font-semibold text-white">{user.name}:</span>{' '}
+                        &ldquo;{j.excuse}&rdquo;
+                      </p>
+                      {j.aiReason && (
+                        <div className={`mt-2 text-xs px-2 py-1 rounded-lg inline-block ${
+                          isPending ? 'bg-amber-900/30 text-amber-300'
+                          : j.aiVerdict === true ? 'bg-green-900/30 text-green-300'
+                          : 'bg-red-900/30 text-red-300'
+                        }`}>
+                          {isPending ? '🗳️' : '🤖'} {j.aiReason}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </div>
-            )
-          })}
+                )
+              }
 
-          {/* Workout cards */}
-          {workouts.map((w) => {
+              // Workout card
+              const w = item
             const user = getUserInfo(w.userId)
             const flag = getFlagForWorkout(w.id)
             const isOwner = w.userId === currentUser?.id
@@ -241,6 +283,7 @@ export default function Feed() {
                     <img
                       src={w.photoURL}
                       alt={w.exerciseType}
+                      loading="lazy"
                       className="w-full max-h-96 object-cover hover:opacity-90 transition-opacity"
                     />
                   </button>
@@ -287,6 +330,72 @@ export default function Feed() {
                           )}
                         </button>
                       ))}
+                    </div>
+                  )
+                })()}
+
+                {/* ── Comments section ───────────────────────── */}
+                {(() => {
+                  const comments = w.comments || []
+                  return (
+                    <div className="px-3 pb-2">
+                      {/* Existing comments */}
+                      {comments.length > 0 && (
+                        <div className="space-y-1.5 mb-2">
+                          {comments.slice(-5).map((c, i) => {
+                            const commenter = getUserInfo(c.userId)
+                            return (
+                              <div key={i} className="flex gap-2 items-start">
+                                <Avatar src={commenter.avatar} name={commenter.name} size="sm" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm text-gray-300">
+                                    <span className="font-semibold text-white">{commenter.name}</span>{' '}
+                                    {c.text}
+                                  </p>
+                                </div>
+                              </div>
+                            )
+                          })}
+                          {comments.length > 5 && (
+                            <p className="text-xs text-gray-500 pl-10">
+                              +{comments.length - 5} comentario(s) anterior(es)
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Comment input */}
+                      {currentUser && (
+                        <div className="flex gap-2 items-center">
+                          <input
+                            type="text"
+                            value={commentText[w.id] || ''}
+                            onChange={(e) =>
+                              setCommentText((prev) => ({ ...prev, [w.id]: e.target.value }))
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault()
+                                handleComment(w.id)
+                              }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            placeholder="Comentar..."
+                            maxLength={140}
+                            className="flex-1 bg-gray-700/50 border border-gray-600/50 rounded-full px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                          />
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleComment(w.id)
+                            }}
+                            disabled={!(commentText[w.id] || '').trim() || submittingComment === w.id}
+                            className="text-indigo-400 hover:text-indigo-300 disabled:text-gray-600 text-sm font-semibold transition-colors"
+                          >
+                            {submittingComment === w.id ? '...' : 'Enviar'}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )
                 })()}
@@ -366,6 +475,7 @@ export default function Feed() {
           })}
         </div>
       )}
+
 
       {/* Flag confirmation dialog */}
       {flagging && (() => {
