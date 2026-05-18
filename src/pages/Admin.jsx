@@ -1,6 +1,7 @@
 import AbsencePlanner from '../components/AbsencePlanner'
 import WeeklyHistory from '../components/WeeklyHistory'
 import WeekEndProcessor from '../components/WeekEndProcessor'
+import RewindLock from '../components/RewindLock'
 import { useAuth } from '../context/AuthContext'
 import Avatar from '../components/Avatar'
 
@@ -33,6 +34,8 @@ export default function Admin({ gameState }) {
         onProcess={processWeekEnd}
         currentWeekId={currentWeekId}
       />
+
+      <RewindLock currentWeekId={currentWeekId} />
 
       <AbsencePlanner />
 
