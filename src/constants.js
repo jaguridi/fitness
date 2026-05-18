@@ -95,6 +95,29 @@ export function formatExerciseTypes(workout) {
   return getExerciseTypes(workout).join(' + ')
 }
 
+/**
+ * Compute "fit points" for a single workout based on duration tiers.
+ * Designed to reward longer sessions without punishing short ones.
+ *   <20 min        = 0.5 pts
+ *   20–44 min      = 1 pt   (the baseline session)
+ *   45–69 min      = 1.5 pts
+ *   70–99 min      = 2 pts
+ *   100+ min       = 2.5 pts (capped)
+ */
+export function getWorkoutPoints(workout) {
+  const m = workout?.duration || 0
+  if (m <= 0) return 0
+  if (m < 20) return 0.5
+  if (m < 45) return 1
+  if (m < 70) return 1.5
+  if (m < 100) return 2
+  return 2.5
+}
+
+export function getTotalPoints(workouts) {
+  return workouts.reduce((sum, w) => sum + getWorkoutPoints(w), 0)
+}
+
 // Format CLP
 export const formatCLP = (amount) => {
   return new Intl.NumberFormat('es-CL', {

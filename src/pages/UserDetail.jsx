@@ -2,18 +2,23 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { USERS, formatCLP, getExerciseTypes, formatExerciseTypes } from '../constants'
 import { getWorkoutsByUser } from '../services/firebaseService'
+import { useAuth } from '../context/AuthContext'
 import Avatar from '../components/Avatar'
 import AchievementBadges from '../components/AchievementBadges'
 import PersonalBests from '../components/PersonalBests'
 import ActivityHeatmap from '../components/ActivityHeatmap'
+import MonthCalendar from '../components/MonthCalendar'
+import WorkoutEditModal, { canEditWorkout } from '../components/WorkoutEditModal'
 import { UserDetailSkeleton } from '../components/Skeleton'
 
 export default function UserDetail({ gameState }) {
   const { userId } = useParams()
   const navigate = useNavigate()
+  const { currentUser } = useAuth()
   const [workouts, setWorkouts] = useState([])
   const [loading, setLoading] = useState(true)
   const [fullscreenPhoto, setFullscreenPhoto] = useState(null)
+  const [editingWorkout, setEditingWorkout] = useState(null)
 
   const userConst = USERS.find((u) => u.id === userId)
   const userFirestore = gameState.users.find((u) => u.id === userId)
@@ -94,6 +99,9 @@ export default function UserDetail({ gameState }) {
       {/* Activity Heatmap */}
       <ActivityHeatmap userId={userId} />
 
+      {/* Month calendar with workout thumbnails */}
+      <MonthCalendar workouts={workouts} onSelectPhoto={setFullscreenPhoto} />
+
       {/* Workouts count */}
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-bold text-white">
@@ -160,14 +168,41 @@ export default function UserDetail({ gameState }) {
                     {w.duration} min
                   </span>
                 </div>
-                <p className="text-gray-400 text-sm mt-1">📅 {w.date}</p>
+                <div className="flex items-center gap-3 text-gray-400 text-sm mt-1 flex-wrap">
+                  <span>📅 {w.date}</span>
+                  {w.calories > 0 && (
+                    <span className="text-orange-400">🔥 {w.calories} kcal</span>
+                  )}
+                </div>
                 {w.description && (
                   <p className="text-gray-300 text-sm mt-2">{w.description}</p>
+                )}
+                {canEditWorkout(w, currentUser?.id) && (
+                  <button
+                    onClick={() => setEditingWorkout(w)}
+                    className="mt-2 text-xs text-gray-500 hover:text-indigo-400 transition-colors"
+                  >
+                    ✏️ Editar
+                  </button>
                 )}
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {/* Edit modal */}
+      {editingWorkout && (
+        <WorkoutEditModal
+          workout={editingWorkout}
+          onSaved={() => {
+            getWorkoutsByUser(userId).then(setWorkouts).catch(() => {})
+          }}
+          onDeleted={() => {
+            setWorkouts((prev) => prev.filter((w) => w.id !== editingWorkout.id))
+          }}
+          onClose={() => setEditingWorkout(null)}
+        />
       )}
 
       {/* Fullscreen photo modal */}

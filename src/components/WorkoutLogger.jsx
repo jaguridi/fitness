@@ -15,6 +15,7 @@ export default function WorkoutLogger({ onClose, onSuccess }) {
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [exerciseTypes, setExerciseTypes] = useState([]) // array now
   const [duration, setDuration] = useState('')
+  const [calories, setCalories] = useState('')
   const [description, setDescription] = useState('')
   const [photo, setPhoto] = useState(null)
   const [photoPreview, setPhotoPreview] = useState(null)
@@ -81,12 +82,14 @@ export default function WorkoutLogger({ onClose, onSuccess }) {
       const photoURL = await uploadWorkoutPhoto(photo, userId, date)
       const weekId = getWeekId(new Date(date + 'T12:00:00'))
 
+      const caloriesValue = calories.trim() ? parseInt(calories) : null
       await addWorkout({
         userId,
         date,
         weekId,
         exerciseType: exerciseTypes, // now an array
         duration: parseInt(duration),
+        ...(caloriesValue && caloriesValue > 0 ? { calories: caloriesValue } : {}),
         description,
         photoURL,
       })
@@ -188,20 +191,37 @@ export default function WorkoutLogger({ onClose, onSuccess }) {
             )}
           </div>
 
-          {/* Duration */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              Duración (minutos)
-            </label>
-            <input
-              type="number"
-              min="1"
-              max="300"
-              value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-              placeholder="30"
-              className="w-full bg-gray-700 border border-gray-600 rounded-xl px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-            />
+          {/* Duration + Calories */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                Duración (min)
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="300"
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                placeholder="30"
+                className="w-full bg-gray-700 border border-gray-600 rounded-xl px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                🔥 Calorías{' '}
+                <span className="text-xs text-gray-500 font-normal">(opcional)</span>
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="5000"
+                value={calories}
+                onChange={(e) => setCalories(e.target.value)}
+                placeholder="450"
+                className="w-full bg-gray-700 border border-gray-600 rounded-xl px-3 py-2 text-white focus:ring-2 focus:ring-orange-500 focus:outline-none"
+              />
+            </div>
           </div>
 
           {/* Photo — camera/gallery/file buttons */}

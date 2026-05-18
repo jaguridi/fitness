@@ -2,6 +2,7 @@ import AbsencePlanner from '../components/AbsencePlanner'
 import WeeklyHistory from '../components/WeeklyHistory'
 import WeekEndProcessor from '../components/WeekEndProcessor'
 import RewindLock from '../components/RewindLock'
+import AchievementBackfill from '../components/AchievementBackfill'
 import { useAuth } from '../context/AuthContext'
 import Avatar from '../components/Avatar'
 
@@ -40,6 +41,8 @@ export default function Admin({ gameState }) {
       <AbsencePlanner />
 
       <WeeklyHistory />
+
+      <AchievementBackfill />
     </div>
   )
 }

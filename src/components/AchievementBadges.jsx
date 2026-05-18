@@ -1,6 +1,14 @@
 import { useState, useEffect } from 'react'
 import { checkAchievements } from '../services/achievements'
-import { getUserSummaries, getWorkoutsByUser } from '../services/firebaseService'
+import {
+  getUserSummaries,
+  getWorkoutsByUser,
+  recordAchievementUnlock,
+} from '../services/firebaseService'
+import { useAuth } from '../context/AuthContext'
+
+// localStorage key for cheap client-side dedup; Firestore doc ID is the source of truth
+const seenKey = (userId, achievementId) => `ach_seen_${userId}_${achievementId}`
 
 /**
  * Display achievements for a user.
@@ -9,9 +17,14 @@ import { getUserSummaries, getWorkoutsByUser } from '../services/firebaseService
  * @param {'compact'|'full'} mode - compact shows only earned, full shows all
  */
 export default function AchievementBadges({ userId, user, mode = 'compact' }) {
+  const { currentUser } = useAuth()
   const [achievements, setAchievements] = useState([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState(false)
+
+  // Only the logged-in user posts their own unlocks. Otherwise opening
+  // the dashboard would have every device try to write for all 4 users.
+  const isSelf = currentUser?.id === userId
 
   useEffect(() => {
     if (!userId) return
@@ -23,6 +36,19 @@ export default function AchievementBadges({ userId, user, mode = 'compact' }) {
         const results = checkAchievements({ summaries, workouts, user: user || {} })
         setAchievements(results)
         setLoading(false)
+
+        if (!isSelf) return
+
+        // Record any newly-earned unlocks. The "seen" key in localStorage
+        // prevents Firestore writes on every render; if the device is new,
+        // the deterministic doc ID still prevents duplicate posts.
+        for (const a of results) {
+          if (!a.earned) continue
+          if (localStorage.getItem(seenKey(userId, a.id))) continue
+          recordAchievementUnlock(userId, a.id, a)
+            .then(() => localStorage.setItem(seenKey(userId, a.id), '1'))
+            .catch(() => {})
+        }
       })
       .catch((err) => {
         console.warn('Achievements check failed:', err)
@@ -30,7 +56,7 @@ export default function AchievementBadges({ userId, user, mode = 'compact' }) {
       })
 
     return () => { cancelled = true }
-  }, [userId, user?.walletBalance, user?.consecutiveSuccesses])
+  }, [userId, user?.walletBalance, user?.consecutiveSuccesses, isSelf])
 
   if (loading) return null
 

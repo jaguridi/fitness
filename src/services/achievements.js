@@ -3,6 +3,7 @@
  * All computation is client-side based on existing Firestore data (summaries + workouts).
  * No additional collections needed.
  */
+import { getBestDayStreak } from '../utils/streaks'
 
 /**
  * Achievement definitions.
@@ -43,6 +44,30 @@ export const ACHIEVEMENTS = [
     icon: '👑',
     category: 'streak',
     check: ({ summaries }) => getBestStreak(summaries) >= 12,
+  },
+  {
+    id: 'day_streak_7',
+    name: 'Semana Sin Fallar',
+    description: '7 días consecutivos con ejercicio',
+    icon: '⚡',
+    category: 'streak',
+    check: ({ workouts }) => getBestDayStreak(workouts) >= 7,
+  },
+  {
+    id: 'day_streak_14',
+    name: 'Dos Semanas Brutales',
+    description: '14 días consecutivos con ejercicio',
+    icon: '🌩️',
+    category: 'streak',
+    check: ({ workouts }) => getBestDayStreak(workouts) >= 14,
+  },
+  {
+    id: 'day_streak_30',
+    name: 'Mes Imparable',
+    description: '30 días consecutivos con ejercicio',
+    icon: '🚀',
+    category: 'streak',
+    check: ({ workouts }) => getBestDayStreak(workouts) >= 30,
   },
 
   // ── Volume-based ─────────────────────────────────────────────
@@ -144,6 +169,71 @@ export const ACHIEVEMENTS = [
         byWeek[w.weekId] = (byWeek[w.weekId] || 0) + (w.duration || 0)
       }
       return Object.values(byWeek).some((m) => m >= 300)
+    },
+  },
+
+  // ── Calories-based ───────────────────────────────────────────
+  {
+    id: 'first_burn',
+    name: 'Primer Quemón',
+    description: 'Registra calorías por primera vez',
+    icon: '🔥',
+    category: 'calories',
+    check: ({ workouts }) => workouts.some((w) => (w.calories || 0) > 0),
+  },
+  {
+    id: 'session_burn_500',
+    name: 'Incinerador',
+    description: 'Quema 500+ kcal en una sola sesión',
+    icon: '🌶️',
+    category: 'calories',
+    check: ({ workouts }) => workouts.some((w) => (w.calories || 0) >= 500),
+  },
+  {
+    id: 'session_burn_1000',
+    name: 'Horno Industrial',
+    description: 'Quema 1.000+ kcal en una sola sesión',
+    icon: '🌋',
+    category: 'calories',
+    check: ({ workouts }) => workouts.some((w) => (w.calories || 0) >= 1000),
+  },
+  {
+    id: 'total_burn_5000',
+    name: '5K Quemadas',
+    description: 'Acumula 5.000 kcal en total',
+    icon: '♨️',
+    category: 'calories',
+    check: ({ workouts }) => totalCalories(workouts) >= 5000,
+  },
+  {
+    id: 'total_burn_20000',
+    name: 'Caldera',
+    description: 'Acumula 20.000 kcal en total',
+    icon: '🔥',
+    category: 'calories',
+    check: ({ workouts }) => totalCalories(workouts) >= 20000,
+  },
+  {
+    id: 'total_burn_100000',
+    name: 'Reactor Nuclear',
+    description: 'Acumula 100.000 kcal en total',
+    icon: '☢️',
+    category: 'calories',
+    check: ({ workouts }) => totalCalories(workouts) >= 100000,
+  },
+  {
+    id: 'big_week_calories',
+    name: 'Semana Volcánica',
+    description: '3.000+ kcal en una sola semana',
+    icon: '💥',
+    category: 'calories',
+    check: ({ workouts }) => {
+      const byWeek = {}
+      for (const w of workouts) {
+        if (!w.weekId) continue
+        byWeek[w.weekId] = (byWeek[w.weekId] || 0) + (w.calories || 0)
+      }
+      return Object.values(byWeek).some((c) => c >= 3000)
     },
   },
 
@@ -262,6 +352,10 @@ function getBestStreak(summaries) {
 
 function totalMinutes(workouts) {
   return workouts.reduce((sum, w) => sum + (w.duration || 0), 0)
+}
+
+function totalCalories(workouts) {
+  return workouts.reduce((sum, w) => sum + (w.calories || 0), 0)
 }
 
 function getUniqueExerciseTypes(workouts) {

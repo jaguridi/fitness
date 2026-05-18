@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { formatCLP } from '../constants'
 import { useAuth } from '../context/AuthContext'
-import { sendNudge } from '../services/firebaseService'
+import { sendNudge, getWorkoutsByUser } from '../services/firebaseService'
+import { getCurrentDayStreak } from '../utils/streaks'
 import Avatar from './Avatar'
 import AchievementBadges from './AchievementBadges'
 
@@ -11,6 +12,20 @@ export default function UserCard({ status, justification }) {
   const { currentUser } = useAuth()
   const [nudging, setNudging] = useState(false)
   const [nudgeMsg, setNudgeMsg] = useState(null)
+  const [dayStreak, setDayStreak] = useState(0)
+
+  // Fetch user workouts to compute the consecutive-day streak.
+  // Cached locally so reloads on the same day don't refetch from network.
+  useEffect(() => {
+    if (!status?.userId) return
+    let cancelled = false
+    getWorkoutsByUser(status.userId)
+      .then((wks) => {
+        if (!cancelled) setDayStreak(getCurrentDayStreak(wks))
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [status?.userId, status?.sessions])
 
   if (!status) return null
   const {
@@ -103,6 +118,14 @@ export default function UserCard({ status, justification }) {
           </span>
         </span>
         <div className="flex items-center gap-2">
+          {dayStreak >= 2 && (
+            <span
+              className="font-semibold text-pink-400"
+              title={`${dayStreak} días consecutivos con ejercicio`}
+            >
+              ⚡ {dayStreak}d
+            </span>
+          )}
           {(user.consecutiveSuccesses || 0) > 0 && (
             <span className={`font-semibold ${user.hasShield ? 'text-cyan-400' : 'text-orange-400'}`}>
               🔥 {user.consecutiveSuccesses} {user.hasShield && '🛡️'}

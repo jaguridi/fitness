@@ -252,6 +252,156 @@ Si alguien ganó un escudo o vida extra, celébralo. Si alguien pagó multa, men
   }
 )
 
+// ── 5b. Monthly Recap — Generate a fun AI-powered monthly summary ──
+exports.generateMonthlyRecap = onCall(
+  { secrets: [anthropicApiKey], maxInstances: 2 },
+  async (request) => {
+    const { monthId } = request.data // format: "YYYY-MM"
+    if (!monthId || !/^\d{4}-\d{2}$/.test(monthId)) {
+      throw new HttpsError('invalid-argument', 'monthId (YYYY-MM) is required.')
+    }
+
+    // Cache check
+    const existing = await db.collection('monthly_recaps').doc(monthId).get()
+    if (existing.exists) {
+      return existing.data()
+    }
+
+    const [year, month] = monthId.split('-').map(Number)
+    // Build list of weekIds that fall in this month (any week whose Monday
+    // is in the month, OR which spans into it).
+    const monthStart = new Date(year, month - 1, 1)
+    const monthEnd = new Date(year, month, 0, 23, 59, 59)
+
+    // Fetch all summaries; filter by parsed weekId end-of-week falling in month
+    const summSnap = await db.collection('weekly_summaries').get()
+    const usersSnap = await db.collection('users').get()
+    const usersMap = {}
+    usersSnap.docs.forEach((d) => { usersMap[d.id] = d.data().name || d.id })
+
+    function weekIdToMonday(weekId) {
+      const [yStr, wStr] = weekId.split('-W')
+      const y = Number(yStr)
+      const w = Number(wStr)
+      const jan1 = new Date(y, 0, 1)
+      const jan1Day = jan1.getDay() || 7
+      const jan1Monday = new Date(y, 0, 1 + (1 - jan1Day))
+      return new Date(jan1Monday.getTime() + (w - 1) * 7 * 24 * 60 * 60 * 1000)
+    }
+
+    const monthSummaries = summSnap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((s) => {
+        if (!s.weekId) return false
+        const mon = weekIdToMonday(s.weekId)
+        return mon >= monthStart && mon <= monthEnd
+      })
+
+    if (monthSummaries.length === 0) {
+      throw new HttpsError('not-found', 'No hay datos para este mes.')
+    }
+
+    // Workouts for the month (filter by date field)
+    const workoutsSnap = await db.collection('workouts').get()
+    const monthWorkouts = workoutsSnap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((w) => {
+        if (!w.date) return false
+        const d = new Date(w.date + 'T12:00:00')
+        return d >= monthStart && d <= monthEnd
+      })
+
+    // Aggregate per user
+    const perUser = {}
+    for (const s of monthSummaries) {
+      if (!perUser[s.userId]) {
+        perUser[s.userId] = {
+          name: usersMap[s.userId] || s.userId,
+          sessions: 0,
+          weeksCompleted: 0,
+          weeksMissed: 0,
+          weeksJustified: 0,
+          weeksFrozen: 0,
+          finesPaid: 0,
+          minutes: 0,
+          calories: 0,
+        }
+      }
+      const u = perUser[s.userId]
+      u.sessions += s.sessions || 0
+      u.finesPaid += s.fineApplied || 0
+      if (s.status === 'completed' || s.lifeUsed) u.weeksCompleted++
+      else if (s.status === 'missed') u.weeksMissed++
+      else if (s.status === 'justified') u.weeksJustified++
+      else if (s.status === 'frozen') u.weeksFrozen++
+    }
+    for (const w of monthWorkouts) {
+      const u = perUser[w.userId]
+      if (!u) continue
+      u.minutes += w.duration || 0
+      u.calories += w.calories || 0
+    }
+
+    const summaryText = Object.values(perUser).map((u) => {
+      const parts = [
+        `${u.name}: ${u.sessions} sesiones, ${u.minutes} min`,
+        `${u.weeksCompleted}/${u.weeksCompleted + u.weeksMissed + u.weeksJustified} semanas cumplidas`,
+      ]
+      if (u.weeksMissed > 0) parts.push(`${u.weeksMissed} fallidas`)
+      if (u.weeksJustified > 0) parts.push(`${u.weeksJustified} justificadas`)
+      if (u.weeksFrozen > 0) parts.push(`${u.weeksFrozen} congeladas`)
+      if (u.finesPaid > 0) parts.push(`multas=$${u.finesPaid}`)
+      if (u.calories > 0) parts.push(`${u.calories} kcal`)
+      return parts.join(', ')
+    }).join('\n')
+
+    const monthNames = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+                        'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+    const monthLabel = `${monthNames[month - 1]} ${year}`
+
+    try {
+      const client = new Anthropic({ apiKey: anthropicApiKey.value() })
+      const msg = await client.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 500,
+        system: `Eres el narrador del reto fitness familiar "FitFamily". Escribe un recap mensual
+en español chileno informal (6-8 frases) con humor cariñoso y referencias deportivas.
+Estructura sugerida:
+1. Una oración de apertura sobre el mes
+2. Quién destacó (positivo)
+3. Quién quedó debiendo (con humor, no cruel)
+4. Algún dato curioso (sesiones totales, kcal, tendencia vs mes anterior si está clara)
+5. Una proyección o consejo para el mes siguiente
+
+No uses markdown. Solo texto plano con saltos de línea. Máximo 3 emojis en total.`,
+        messages: [{
+          role: 'user',
+          content: `Resumen mensual de ${monthLabel}:\n${summaryText}`,
+        }],
+      })
+
+      const recap = msg.content[0]?.text || 'No se pudo generar el resumen.'
+      const recapData = {
+        monthId,
+        monthLabel,
+        recap,
+        perUser: Object.values(perUser),
+        totals: {
+          sessions: monthWorkouts.length,
+          minutes: monthWorkouts.reduce((s, w) => s + (w.duration || 0), 0),
+          calories: monthWorkouts.reduce((s, w) => s + (w.calories || 0), 0),
+        },
+        createdAt: new Date(),
+      }
+      await db.collection('monthly_recaps').doc(monthId).set(recapData)
+      return recapData
+    } catch (err) {
+      console.error('Monthly recap generation error:', err)
+      throw new HttpsError('internal', 'Error generando el resumen mensual.')
+    }
+  }
+)
+
 // ── 6. AI Judge — Evaluate justifications with Claude ─────────
 
 const AI_JUDGE_PROMPT = `Eres el juez estricto pero justo del reto fitness familiar "FitFamily".

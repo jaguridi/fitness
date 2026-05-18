@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getExerciseTypes } from '../constants'
 import { getUserSummaries, getWorkoutsByUser } from '../services/firebaseService'
+import { getCurrentDayStreak, getBestDayStreak } from '../utils/streaks'
 
 /**
  * Personal Bests — shows records and stats for a user.
@@ -33,9 +34,26 @@ export default function PersonalBests({ userId }) {
     { icon: '⏱️', label: 'Sesión más larga', value: stats.longestSession ? `${stats.longestSession} min` : '—', sub: stats.longestSessionType },
     { icon: '📅', label: 'Mejor semana', value: stats.bestWeekSessions ? `${stats.bestWeekSessions} sesiones` : '—', sub: stats.bestWeekId },
     { icon: '🔥', label: 'Mejor racha', value: stats.bestStreak ? `${stats.bestStreak} semanas` : '—', sub: null },
+    { icon: '⚡', label: 'Racha días', value: stats.currentDayStreak ? `${stats.currentDayStreak} días` : '—', sub: stats.bestDayStreak ? `Récord: ${stats.bestDayStreak}` : null },
     { icon: '🏃', label: 'Total sesiones', value: `${stats.totalWorkouts}`, sub: `${stats.totalMinutes} min totales` },
     { icon: '💪', label: 'Ejercicio favorito', value: stats.favoriteExercise || '—', sub: stats.favoriteCount ? `${stats.favoriteCount} veces` : null },
     { icon: '🌈', label: 'Deportes probados', value: `${stats.uniqueTypes}`, sub: stats.uniqueTypes >= 6 ? 'Atleta completo' : `de ${stats.availableTypes}` },
+    ...(stats.totalCalories > 0
+      ? [
+          {
+            icon: '♨️',
+            label: 'Mayor quema',
+            value: stats.biggestBurn ? `${stats.biggestBurn} kcal` : '—',
+            sub: stats.biggestBurnType,
+          },
+          {
+            icon: '🔥',
+            label: 'Total kcal',
+            value: `${stats.totalCalories.toLocaleString('es-CL')}`,
+            sub: `${stats.workoutsWithCalories} sesión(es) registradas`,
+          },
+        ]
+      : []),
   ]
 
   return (
@@ -100,6 +118,23 @@ function computeStats(summaries, workouts) {
   const totalWorkouts = workouts.length
   const totalMinutes = workouts.reduce((sum, w) => sum + (w.duration || 0), 0)
 
+  // Calories: biggest burn + total + count of workouts with calories
+  let biggestBurn = 0
+  let biggestBurnType = ''
+  let totalCalories = 0
+  let workoutsWithCalories = 0
+  for (const w of workouts) {
+    const cal = w.calories || 0
+    if (cal > 0) {
+      workoutsWithCalories++
+      totalCalories += cal
+      if (cal > biggestBurn) {
+        biggestBurn = cal
+        biggestBurnType = getExerciseTypes(w).join(' + ')
+      }
+    }
+  }
+
   // Favorite exercise type — count each type separately (a workout with 2 types adds 1 to each)
   const typeCounts = {}
   for (const w of workouts) {
@@ -129,5 +164,11 @@ function computeStats(summaries, workouts) {
     favoriteCount,
     uniqueTypes,
     availableTypes,
+    biggestBurn,
+    biggestBurnType,
+    totalCalories,
+    workoutsWithCalories,
+    currentDayStreak: getCurrentDayStreak(workouts),
+    bestDayStreak: getBestDayStreak(workouts),
   }
 }

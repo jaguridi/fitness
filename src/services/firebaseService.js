@@ -321,6 +321,20 @@ export async function deleteWorkout(workoutId) {
   await deleteDoc(doc(db, 'workouts', workoutId))
 }
 
+/**
+ * Update editable fields of a workout. The caller is responsible for enforcing
+ * the 24h ownership window — Firestore rules can/should mirror this in prod.
+ */
+export async function updateWorkout(workoutId, updates) {
+  // Only allow whitelisted fields to mutate (defense in depth).
+  const allowed = ['duration', 'calories', 'description', 'exerciseType']
+  const payload = {}
+  for (const k of allowed) {
+    if (k in updates) payload[k] = updates[k]
+  }
+  await updateDoc(doc(db, 'workouts', workoutId), payload)
+}
+
 /** Real-time subscription to all pending flags. */
 export function subscribeFlaggedWorkouts(callback, onError) {
   const q = query(flaggedWorkoutsCol(), where('status', '==', 'pending'))
@@ -329,6 +343,43 @@ export function subscribeFlaggedWorkouts(callback, onError) {
     (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
     (err) => {
       console.error('subscribeFlaggedWorkouts error:', err)
+      onError?.(err)
+    }
+  )
+}
+
+// ── Achievement Unlocks ─────────────────────────────────────
+const achievementUnlocksCol = () => collection(db, 'achievement_unlocks')
+
+/**
+ * Record that a user unlocked an achievement. Doc ID is deterministic
+ * (`{userId}_{achievementId}`) so concurrent writes from multiple tabs
+ * naturally dedupe — if the achievement was already posted, this is a no-op.
+ */
+export async function recordAchievementUnlock(userId, achievementId, achievement) {
+  const docId = `${userId}_${achievementId}`
+  const ref = doc(db, 'achievement_unlocks', docId)
+  const existing = await getDoc(ref)
+  if (existing.exists()) return false
+  await setDoc(ref, {
+    userId,
+    achievementId,
+    name: achievement?.name || achievementId,
+    description: achievement?.description || '',
+    icon: achievement?.icon || '🏅',
+    createdAt: serverTimestamp(),
+  })
+  return true
+}
+
+/** Subscribe to the most recent achievement unlocks (for the Feed). */
+export function subscribeAchievementUnlocks(callback, onError, maxItems = 30) {
+  const q = query(achievementUnlocksCol(), orderBy('createdAt', 'desc'), limit(maxItems))
+  return onSnapshot(
+    q,
+    (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    (err) => {
+      console.error('subscribeAchievementUnlocks error:', err)
       onError?.(err)
     }
   )
@@ -414,6 +465,20 @@ export async function getWeeklyRecap(weekId) {
 
   // Generate via Cloud Function
   const { data } = await generateWeeklyRecapFn({ weekId })
+  return data
+}
+
+const generateMonthlyRecapFn = httpsCallable(getFunctions(app), 'generateMonthlyRecap')
+
+/**
+ * Get or generate the AI-powered monthly recap for a given month (YYYY-MM).
+ */
+export async function getMonthlyRecap(monthId) {
+  const docSnap = await getDoc(doc(db, 'monthly_recaps', monthId))
+  if (docSnap.exists()) {
+    return docSnap.data()
+  }
+  const { data } = await generateMonthlyRecapFn({ monthId })
   return data
 }
 

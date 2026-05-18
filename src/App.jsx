@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import useGameLogic from './hooks/useGameLogic'
 import { registerPushToken } from './services/notificationService'
 import OnboardingModal, { shouldShowOnboarding } from './components/OnboardingModal'
+import OfflineIndicator from './components/OfflineIndicator'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Feed from './pages/Feed'
@@ -45,6 +46,7 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
+      <OfflineIndicator />
       {/* Main content */}
       <main className="max-w-lg mx-auto px-4 pt-4">
         <Routes>

@@ -5,6 +5,7 @@ import {
   subscribeAllWorkouts,
   subscribeJustifications,
   subscribeFlaggedWorkouts,
+  subscribeAchievementUnlocks,
   flagWorkout,
   voteOnFlag,
   resolveFlag,
@@ -14,6 +15,7 @@ import {
   addComment,
 } from '../services/firebaseService'
 import Avatar from '../components/Avatar'
+import WorkoutEditModal, { canEditWorkout } from '../components/WorkoutEditModal'
 import { FeedCardSkeleton } from '../components/Skeleton'
 
 export default function Feed() {
@@ -21,9 +23,11 @@ export default function Feed() {
   const [workouts, setWorkouts] = useState([])
   const [justifications, setJustifications] = useState([])
   const [flags, setFlags] = useState([])
+  const [unlocks, setUnlocks] = useState([])
   const [loading, setLoading] = useState(true)
   const [fullscreenPhoto, setFullscreenPhoto] = useState(null)
   const [flagging, setFlagging] = useState(null) // workoutId being flagged (confirm dialog)
+  const [editingWorkout, setEditingWorkout] = useState(null)
 
   useEffect(() => {
     let loadCount = 0
@@ -41,7 +45,11 @@ export default function Feed() {
       (data) => { setFlags(data); checkLoaded() },
       (err) => { console.error(err); checkLoaded() }
     )
-    return () => { unsub1(); unsub2(); unsub3() }
+    const unsub4 = subscribeAchievementUnlocks(
+      (data) => setUnlocks(data),
+      (err) => console.error(err)
+    )
+    return () => { unsub1(); unsub2(); unsub3(); unsub4() }
   }, [])
 
   const getUserInfo = (userId) => USERS.find((u) => u.id === userId) || { name: 'Desconocido', avatar: '❓' }
@@ -158,20 +166,51 @@ export default function Feed() {
         <p className="text-sm text-gray-400 mt-1">Actividad de toda la familia</p>
       </div>
 
-      {workouts.length === 0 && justifications.length === 0 ? (
+      {workouts.length === 0 && justifications.length === 0 && unlocks.length === 0 ? (
         <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700 text-center">
           <div className="text-4xl mb-2">🏃</div>
           <p className="text-gray-400">Aún no hay actividad. ¡Sé el primero!</p>
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Merge workouts and justifications into a single timeline */}
+          {/* Merge workouts, justifications and achievement unlocks into one timeline */}
           {[
             ...workouts.map((w) => ({ ...w, _type: 'workout', _ts: w.createdAt?.seconds || 0 })),
             ...justifications.map((j) => ({ ...j, _type: 'justification', _ts: j.createdAt?.seconds || 0 })),
+            ...unlocks.map((u) => ({ ...u, _type: 'unlock', _ts: u.createdAt?.seconds || 0 })),
           ]
             .sort((a, b) => b._ts - a._ts)
             .map((item) => {
+              if (item._type === 'unlock') {
+                const u = item
+                const owner = getUserInfo(u.userId)
+                return (
+                  <div
+                    key={`u-${u.id}`}
+                    className="rounded-2xl border border-amber-700/30 bg-gradient-to-r from-amber-900/15 to-yellow-900/10 p-4"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="text-3xl">{u.icon || '🏅'}</div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-amber-300">
+                          <span className="font-bold text-amber-200">{owner.name}</span>{' '}
+                          desbloqueó{' '}
+                          <span className="font-bold text-amber-100">{u.name}</span>
+                        </p>
+                        {u.description && (
+                          <p className="text-xs text-amber-400/80 mt-0.5 truncate">
+                            {u.description}
+                          </p>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-amber-500/70 shrink-0">
+                        {formatTimeAgo(u.createdAt)}
+                      </span>
+                    </div>
+                  </div>
+                )
+              }
+
               if (item._type === 'justification') {
                 const j = item
                 const user = getUserInfo(j.userId)
@@ -303,8 +342,11 @@ export default function Feed() {
 
                 {/* Stats + description */}
                 <div className="p-3">
-                  <div className="flex items-center gap-3 text-sm text-gray-400 mb-1">
+                  <div className="flex items-center gap-3 text-sm text-gray-400 mb-1 flex-wrap">
                     <span>⏱️ {w.duration} min</span>
+                    {w.calories > 0 && (
+                      <span className="text-orange-400">🔥 {w.calories} kcal</span>
+                    )}
                     <span>📅 {w.date}</span>
                   </div>
                   {w.description && (
@@ -411,6 +453,18 @@ export default function Feed() {
                     </div>
                   )
                 })()}
+
+                {/* ── Owner edit action (within 24h) ──────────── */}
+                {isOwner && canEditWorkout(w, currentUser?.id) && (
+                  <div className="px-3 pb-3">
+                    <button
+                      onClick={() => setEditingWorkout(w)}
+                      className="text-xs text-gray-500 hover:text-indigo-400 transition-colors"
+                    >
+                      ✏️ Editar
+                    </button>
+                  </div>
+                )}
 
                 {/* ── Flag & Vote section ────────────────────── */}
                 {(() => {
@@ -537,6 +591,14 @@ export default function Feed() {
           </div>
         )
       })()}
+
+      {/* Edit modal */}
+      {editingWorkout && (
+        <WorkoutEditModal
+          workout={editingWorkout}
+          onClose={() => setEditingWorkout(null)}
+        />
+      )}
 
       {/* Fullscreen photo modal */}
       {fullscreenPhoto && (

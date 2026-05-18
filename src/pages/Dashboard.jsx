@@ -12,6 +12,7 @@ import JustificationVoteCard from '../components/JustificationVoteCard'
 import EasterEgg from '../components/EasterEgg'
 import MiniGame from '../components/MiniGame'
 import WeeklyRecap from '../components/WeeklyRecap'
+import CompliancePrediction from '../components/CompliancePrediction'
 import Confetti from '../components/Confetti'
 import { DashboardSkeleton } from '../components/Skeleton'
 
@@ -176,6 +177,11 @@ export default function Dashboard({ gameState }) {
 
       {/* AI Weekly Recap */}
       <WeeklyRecap currentWeekId={currentWeekId} />
+
+      {/* Compliance prediction for the current user */}
+      {currentUser && (
+        <CompliancePrediction status={getUserWeekStatus(currentUser.id)} />
+      )}
 
       {/* User cards */}
       <div className="space-y-3">

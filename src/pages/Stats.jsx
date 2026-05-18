@@ -1,11 +1,17 @@
 import { useState, useEffect } from 'react'
-import { USERS, formatCLP, getAvatarForMood, getExerciseTypes } from '../constants'
+import { USERS, formatCLP, getAvatarForMood, getExerciseTypes, getTotalPoints } from '../constants'
 import { getUserSummaries, getWorkoutsByUser } from '../services/firebaseService'
 import Avatar from '../components/Avatar'
+import MonthlyRecap from '../components/MonthlyRecap'
 import { StatsSkeleton } from '../components/Skeleton'
 
 const MAX_BAR_H = 72 // px — max bar height in the chart
-const CHART_WEEKS = 8
+const TIMEFRAMES = [
+  { id: 8, label: '8 sem' },
+  { id: 12, label: '12 sem' },
+  { id: 26, label: '26 sem' },
+]
+const DEFAULT_TIMEFRAME = 8
 
 function barColor(status, lifeUsed) {
   if (lifeUsed) return 'bg-indigo-500'
@@ -32,7 +38,9 @@ export default function Stats({ gameState }) {
   const [summaries, setSummaries] = useState({}) // { userId: [summary,...] }
   const [allWorkouts, setAllWorkouts] = useState({}) // { userId: [workout,...] }
   const [selectedUser, setSelectedUser] = useState(USERS[0].id)
-  const [sortBy, setSortBy] = useState('rate') // 'rate' | 'minutes' | 'avgMinutes'
+  const [sortBy, setSortBy] = useState('rate') // 'rate' | 'minutes' | 'avgMinutes' | 'calories'
+  const [trendMetric, setTrendMetric] = useState('sessions') // 'sessions' | 'minutes' | 'calories'
+  const [timeframe, setTimeframe] = useState(DEFAULT_TIMEFRAME)
   const [loading, setLoading] = useState(true)
 
   const { users } = gameState
@@ -74,6 +82,13 @@ export default function Stats({ gameState }) {
     const totalMins = wks.reduce((sum, w) => sum + (w.duration || 0), 0)
     const avgMins = wks.length > 0 ? Math.round(totalMins / wks.length) : 0
 
+    // Calories-based stats (only counts workouts that registered calories)
+    const totalCals = wks.reduce((sum, w) => sum + (w.calories || 0), 0)
+    const sessionsWithCals = wks.filter((w) => (w.calories || 0) > 0).length
+
+    // Fit points — duration-tiered scoring
+    const totalPoints = getTotalPoints(wks)
+
     return {
       ...u,
       avatar: getAvatarForMood(userConst, firestoreUser),
@@ -86,11 +101,16 @@ export default function Stats({ gameState }) {
       lives: firestoreUser.extraLives || 0,
       totalMins,
       avgMins,
+      totalCals,
+      sessionsWithCals,
+      totalPoints,
       totalSessions: wks.length,
     }
   }).sort((a, b) => {
     if (sortBy === 'minutes') return b.totalMins - a.totalMins
     if (sortBy === 'avgMinutes') return b.avgMins - a.avgMins
+    if (sortBy === 'calories') return b.totalCals - a.totalCals
+    if (sortBy === 'points') return b.totalPoints - a.totalPoints
     return b.rate - a.rate || a.fines - b.fines
   })
 
@@ -99,11 +119,9 @@ export default function Stats({ gameState }) {
   // ── Per-user chart ──────────────────────────────────────────
   const selSums = (summaries[selectedUser] || [])
     .sort((a, b) => a.weekId.localeCompare(b.weekId))
-    .slice(-CHART_WEEKS)
+    .slice(-timeframe)
 
-  const maxSessions = Math.max(...selSums.map((s) => s.sessions || 0), 3)
   const selFirestore = users.find((u) => u.id === selectedUser) || {}
-  const selConst = USERS.find((u) => u.id === selectedUser)
   const totalSessions = selSums.reduce((s, w) => s + (w.sessions || 0), 0)
   const bestStreak = calcBestStreak(selSums)
 
@@ -112,6 +130,46 @@ export default function Stats({ gameState }) {
   const selTotalMins = selWorkouts.reduce((sum, w) => sum + (w.duration || 0), 0)
   const selAvgMins = selWorkouts.length > 0 ? Math.round(selTotalMins / selWorkouts.length) : 0
   const selLongest = selWorkouts.reduce((max, w) => Math.max(max, w.duration || 0), 0)
+  const selTotalCals = selWorkouts.reduce((sum, w) => sum + (w.calories || 0), 0)
+
+  // ── Weekly trend per metric (sessions/minutes/calories) ─────
+  // Build weekId -> { sessions, minutes, calories } map for selected user
+  const selWeekIds = selSums.map((s) => s.weekId)
+  const selWeekTotals = {}
+  for (const wid of selWeekIds) {
+    selWeekTotals[wid] = { sessions: 0, minutes: 0, calories: 0 }
+  }
+  for (const w of selWorkouts) {
+    if (!w.weekId || !selWeekTotals[w.weekId]) continue
+    selWeekTotals[w.weekId].minutes += w.duration || 0
+    selWeekTotals[w.weekId].calories += w.calories || 0
+  }
+  // Sessions come from summaries (more accurate; respects status logic)
+  for (const s of selSums) {
+    if (selWeekTotals[s.weekId]) selWeekTotals[s.weekId].sessions = s.sessions || 0
+  }
+
+  const trendData = selSums.map((s) => ({
+    weekId: s.weekId,
+    status: s.status,
+    lifeUsed: s.lifeUsed,
+    value: selWeekTotals[s.weekId]?.[trendMetric] || 0,
+  }))
+  const trendMax = Math.max(...trendData.map((d) => d.value), trendMetric === 'sessions' ? 3 : 1)
+  // Trailing 4-week moving average for trend line
+  const trendAvg = trendData.map((_, i) => {
+    const window = trendData.slice(Math.max(0, i - 3), i + 1)
+    return window.reduce((s, d) => s + d.value, 0) / window.length
+  })
+
+  // Format helpers for trend metric labels
+  const fmtTrendValue = (v) => {
+    if (trendMetric === 'minutes') return `${v}m`
+    if (trendMetric === 'calories') return v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`
+    return `${v}`
+  }
+  const trendTotal = trendData.reduce((s, d) => s + d.value, 0)
+  const trendAvgValue = trendData.length > 0 ? Math.round(trendTotal / trendData.length) : 0
 
   // ── Family aggregates ───────────────────────────────────────
   const familyTotals = USERS.reduce((acc, u) => {
@@ -119,9 +177,10 @@ export default function Stats({ gameState }) {
     const fu = users.find((fu) => fu.id === u.id) || {}
     acc.totalSessions += wks.length
     acc.totalMinutes += wks.reduce((s, w) => s + (w.duration || 0), 0)
+    acc.totalCalories += wks.reduce((s, w) => s + (w.calories || 0), 0)
     acc.totalFines += fu.walletBalance || 0
     return acc
-  }, { totalSessions: 0, totalMinutes: 0, totalFines: 0 })
+  }, { totalSessions: 0, totalMinutes: 0, totalCalories: 0, totalFines: 0 })
 
   // Top exercise type across the whole family
   const familyTypeCounts = {}
@@ -135,12 +194,12 @@ export default function Stats({ gameState }) {
   const familyTopExercise = Object.entries(familyTypeCounts).sort((a, b) => b[1] - a[1])[0]
 
   // ── Multi-user weekly comparison chart ──────────────────────
-  // Build a map of weekId -> { userId: sessions } for the last CHART_WEEKS weeks
+  // Build a map of weekId -> { userId: sessions } for the selected timeframe
   const allWeekIds = new Set()
   USERS.forEach((u) => {
     (summaries[u.id] || []).forEach((s) => allWeekIds.add(s.weekId))
   })
-  const sortedWeekIds = [...allWeekIds].sort().slice(-CHART_WEEKS)
+  const sortedWeekIds = [...allWeekIds].sort().slice(-timeframe)
   const weekColors = {
     user1: '#6366f1', // indigo
     user2: '#ec4899', // pink
@@ -203,12 +262,15 @@ export default function Stats({ gameState }) {
         <p className="text-sm text-gray-400 mt-1">Rendimiento familiar</p>
       </div>
 
+      {/* Monthly recap (first week of each month only) */}
+      <MonthlyRecap />
+
       {/* ── Family overview ─────────────────────────────────── */}
       <div className="bg-gradient-to-br from-indigo-900/30 to-purple-900/30 rounded-2xl border border-indigo-700/30 overflow-hidden">
         <div className="px-4 py-3 border-b border-indigo-700/30">
           <h3 className="font-bold text-white text-sm">👨‍👩‍👧‍👦 Total familia</h3>
         </div>
-        <div className="grid grid-cols-2 gap-px bg-indigo-900/20">
+        <div className={`grid ${familyTotals.totalCalories > 0 ? 'grid-cols-3' : 'grid-cols-2'} gap-px bg-indigo-900/20`}>
           <div className="bg-gray-800/60 p-3 text-center">
             <p className="text-2xl font-bold text-white">{familyTotals.totalSessions}</p>
             <p className="text-xs text-gray-400">Sesiones totales</p>
@@ -219,6 +281,16 @@ export default function Stats({ gameState }) {
             </p>
             <p className="text-xs text-gray-400">Horas acumuladas</p>
           </div>
+          {familyTotals.totalCalories > 0 && (
+            <div className="bg-gray-800/60 p-3 text-center">
+              <p className="text-2xl font-bold text-orange-400">
+                {familyTotals.totalCalories >= 1000
+                  ? `${(familyTotals.totalCalories / 1000).toFixed(1)}k`
+                  : familyTotals.totalCalories}
+              </p>
+              <p className="text-xs text-gray-400">🔥 kcal totales</p>
+            </div>
+          )}
           <div className="bg-gray-800/60 p-3 text-center">
             <p className="text-lg font-bold text-red-400">{formatCLP(familyTotals.totalFines)}</p>
             <p className="text-xs text-gray-400">Multas pagadas</p>
@@ -239,11 +311,15 @@ export default function Stats({ gameState }) {
         <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between gap-2">
           <h3 className="font-bold text-white text-sm">🏆 Clasificación familiar</h3>
           {/* Sort selector */}
-          <div className="flex gap-1">
+          <div className="flex gap-1 flex-wrap justify-end">
             {[
               { id: 'rate', label: '%', title: 'Cumplimiento' },
+              { id: 'points', label: 'Pts', title: 'Puntos ponderados por duración' },
               { id: 'minutes', label: 'Min', title: 'Total minutos' },
               { id: 'avgMinutes', label: 'Prom', title: 'Promedio min/sesión' },
+              ...(familyTotals.totalCalories > 0
+                ? [{ id: 'calories', label: 'kcal', title: 'Calorías totales' }]
+                : []),
             ].map((opt) => (
               <button
                 key={opt.id}
@@ -299,7 +375,7 @@ export default function Stats({ gameState }) {
                       </>
                     )
                   })()
-                ) : (
+                ) : sortBy === 'avgMinutes' ? (
                   (() => {
                     const max = Math.max(...leaderboard.map((x) => x.avgMins), 1)
                     const pct = Math.round((u.avgMins / max) * 100)
@@ -310,6 +386,36 @@ export default function Stats({ gameState }) {
                         </div>
                         <span className="text-xs text-gray-400 shrink-0 w-12 text-right">
                           {u.avgMins}m/s
+                        </span>
+                      </>
+                    )
+                  })()
+                ) : sortBy === 'points' ? (
+                  (() => {
+                    const max = Math.max(...leaderboard.map((x) => x.totalPoints), 1)
+                    const pct = Math.round((u.totalPoints / max) * 100)
+                    return (
+                      <>
+                        <div className="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full bg-yellow-500" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-xs text-gray-400 shrink-0 w-14 text-right">
+                          {u.totalPoints.toFixed(1)} pts
+                        </span>
+                      </>
+                    )
+                  })()
+                ) : (
+                  (() => {
+                    const max = Math.max(...leaderboard.map((x) => x.totalCals), 1)
+                    const pct = Math.round((u.totalCals / max) * 100)
+                    return (
+                      <>
+                        <div className="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full bg-orange-500" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-xs text-gray-400 shrink-0 w-14 text-right">
+                          {u.totalCals >= 1000 ? `${(u.totalCals / 1000).toFixed(1)}k` : u.totalCals} kcal
                         </span>
                       </>
                     )
@@ -325,6 +431,20 @@ export default function Stats({ gameState }) {
                     <span className="text-xs text-red-400">{formatCLP(u.fines)}</span>
                   )}
                 </>
+              ) : sortBy === 'calories' ? (
+                <>
+                  <span className="text-xs text-gray-400">{u.sessionsWithCals} ses.</span>
+                  <span className="text-xs text-gray-500">
+                    {u.sessionsWithCals > 0 ? Math.round(u.totalCals / u.sessionsWithCals) : 0} kcal/ses
+                  </span>
+                </>
+              ) : sortBy === 'points' ? (
+                <>
+                  <span className="text-xs text-gray-400">{u.totalSessions} ses.</span>
+                  <span className="text-xs text-gray-500">
+                    {u.totalSessions > 0 ? (u.totalPoints / u.totalSessions).toFixed(2) : '0'} pts/ses
+                  </span>
+                </>
               ) : (
                 <>
                   <span className="text-xs text-gray-400">{u.totalSessions} ses.</span>
@@ -339,6 +459,24 @@ export default function Stats({ gameState }) {
               {u.streak >= 2 && <span title={`${u.streak} sem. seguidas`}>🔥</span>}
             </div>
           </div>
+        ))}
+      </div>
+
+      {/* ── Timeframe selector ───────────────────────────────── */}
+      <div className="flex items-center justify-end gap-1.5">
+        <span className="text-xs text-gray-500 mr-1">Ventana:</span>
+        {TIMEFRAMES.map((tf) => (
+          <button
+            key={tf.id}
+            onClick={() => setTimeframe(tf.id)}
+            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
+              timeframe === tf.id
+                ? 'bg-indigo-600 text-white'
+                : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
+            }`}
+          >
+            {tf.label}
+          </button>
         ))}
       </div>
 
@@ -476,8 +614,8 @@ export default function Stats({ gameState }) {
           </div>
         </div>
 
-        {/* Minutes pills */}
-        <div className="grid grid-cols-3 gap-2 p-3 border-b border-gray-700">
+        {/* Minutes + Calories pills */}
+        <div className={`grid ${selTotalCals > 0 ? 'grid-cols-4' : 'grid-cols-3'} gap-2 p-3 border-b border-gray-700`}>
           <div className="bg-gray-700/50 rounded-xl p-2.5 text-center">
             <p className="text-xl font-bold text-cyan-400">
               {Math.floor(selTotalMins / 60)}h {selTotalMins % 60}m
@@ -492,58 +630,127 @@ export default function Stats({ gameState }) {
             <p className="text-xl font-bold text-amber-400">{selLongest}</p>
             <p className="text-xs text-gray-400">Sesión + larga</p>
           </div>
+          {selTotalCals > 0 && (
+            <div className="bg-gray-700/50 rounded-xl p-2.5 text-center">
+              <p className="text-xl font-bold text-orange-400">
+                {selTotalCals >= 1000 ? `${(selTotalCals / 1000).toFixed(1)}k` : selTotalCals}
+              </p>
+              <p className="text-xs text-gray-400">🔥 kcal</p>
+            </div>
+          )}
         </div>
 
-        {/* Bar chart */}
-        <div className="p-4">
-          <p className="text-xs text-gray-500 mb-3">
-            Últimas {selSums.length > 0 ? selSums.length : 0} semanas procesadas
-          </p>
-          {selSums.length === 0 ? (
+        {/* Trend chart header with metric toggle */}
+        <div className="px-4 pt-4 pb-2 flex items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-bold text-white">📊 Tendencia</p>
+            <p className="text-[11px] text-gray-500">
+              {trendData.length} semana(s) · prom. {fmtTrendValue(trendAvgValue)}
+            </p>
+          </div>
+          <div className="flex gap-1">
+            {[
+              { id: 'sessions', label: 'Ses.', color: 'green' },
+              { id: 'minutes', label: 'Min', color: 'cyan' },
+              ...(selTotalCals > 0 ? [{ id: 'calories', label: 'kcal', color: 'orange' }] : []),
+            ].map((m) => (
+              <button
+                key={m.id}
+                onClick={() => setTrendMetric(m.id)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                  trendMetric === m.id
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Trend chart — bars + moving average overlay */}
+        <div className="px-4 pb-4">
+          {trendData.length === 0 ? (
             <p className="text-gray-500 text-sm text-center py-6">Sin historial aún</p>
           ) : (
             <>
-              <div
-                className="flex items-end justify-between gap-1"
-                style={{ height: `${MAX_BAR_H + 28}px` }}
-              >
-                {selSums.map((s) => {
-                  const barH = Math.max(4, Math.round((s.sessions / maxSessions) * MAX_BAR_H))
-                  const color = barColor(s.status, s.lifeUsed)
-                  const weekNum = s.weekId.split('-W')[1]
-                  const icon = s.status === 'justified' ? '⚖️'
-                    : s.status === 'frozen' ? '❄️'
-                    : s.lifeUsed ? '❤️'
-                    : null
-                  return (
-                    <div key={s.weekId} className="flex-1 flex flex-col items-center gap-0.5">
-                      {icon
-                        ? <span className="text-xs leading-none">{icon}</span>
-                        : <span className="text-xs text-gray-500">{s.sessions}</span>
-                      }
-                      <div
-                        className={`w-full rounded-t-sm ${color}`}
-                        style={{ height: `${barH}px` }}
-                      />
-                      <span className="text-xs text-gray-600">W{weekNum}</span>
-                    </div>
-                  )
-                })}
+              <div className="relative" style={{ height: `${MAX_BAR_H + 28}px` }}>
+                {/* Bars (use status color when showing sessions, otherwise metric color) */}
+                <div className="flex items-end justify-between gap-1 absolute inset-0">
+                  {trendData.map((d) => {
+                    const barH = Math.max(2, Math.round((d.value / trendMax) * MAX_BAR_H))
+                    const color =
+                      trendMetric === 'sessions'
+                        ? barColor(d.status, d.lifeUsed)
+                        : trendMetric === 'minutes'
+                        ? 'bg-cyan-500'
+                        : 'bg-orange-500'
+                    const weekNum = d.weekId.split('-W')[1]
+                    return (
+                      <div key={d.weekId} className="flex-1 flex flex-col items-center gap-0.5 min-w-0">
+                        <span className="text-[10px] text-gray-500 leading-none truncate w-full text-center">
+                          {fmtTrendValue(d.value)}
+                        </span>
+                        <div
+                          className={`w-full rounded-t-sm ${color} transition-all`}
+                          style={{ height: `${barH}px` }}
+                          title={`${d.weekId}: ${fmtTrendValue(d.value)}`}
+                        />
+                        <span className="text-[10px] text-gray-600">W{weekNum}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Moving average overlay (SVG polyline) */}
+                {trendData.length >= 2 && (
+                  <svg
+                    className="absolute inset-0 pointer-events-none"
+                    style={{ paddingTop: '14px', paddingBottom: '14px' }}
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                  >
+                    <polyline
+                      fill="none"
+                      stroke="#a78bfa"
+                      strokeWidth="1.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      vectorEffect="non-scaling-stroke"
+                      points={trendAvg
+                        .map((v, i) => {
+                          const x = trendData.length === 1
+                            ? 50
+                            : (i / (trendData.length - 1)) * 100
+                          const y = 100 - (v / trendMax) * 100
+                          return `${x.toFixed(2)},${y.toFixed(2)}`
+                        })
+                        .join(' ')}
+                    />
+                  </svg>
+                )}
               </div>
+
               {/* Legend */}
-              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3">
-                {[
-                  ['bg-green-500', 'Cumplida'],
-                  ['bg-indigo-500', 'Vida usada'],
-                  ['bg-red-500', 'Multa'],
-                  ['bg-amber-500', 'Justificada'],
-                  ['bg-gray-500', 'Congelada'],
-                ].map(([color, label]) => (
-                  <span key={label} className="flex items-center gap-1 text-xs text-gray-500">
-                    <span className={`w-2 h-2 rounded-sm ${color} inline-block`} />
-                    {label}
-                  </span>
-                ))}
+              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3 items-center">
+                <span className="flex items-center gap-1 text-xs text-gray-500">
+                  <span className="w-3 h-0.5 bg-purple-400 inline-block" />
+                  Prom. móvil 4 sem
+                </span>
+                {trendMetric === 'sessions' &&
+                  [
+                    ['bg-green-500', 'Cumplida'],
+                    ['bg-indigo-500', 'Vida usada'],
+                    ['bg-red-500', 'Multa'],
+                    ['bg-amber-500', 'Justificada'],
+                    ['bg-gray-500', 'Congelada'],
+                  ].map(([color, label]) => (
+                    <span key={label} className="flex items-center gap-1 text-xs text-gray-500">
+                      <span className={`w-2 h-2 rounded-sm ${color} inline-block`} />
+                      {label}
+                    </span>
+                  ))}
               </div>
             </>
           )}
