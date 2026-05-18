@@ -242,17 +242,37 @@ export default function useGameLogic() {
         const abs = await getAllAbsences()
         setAbsences(abs)
 
-        // Auto week-end processing: close previous week if not yet done
+        // Auto week-end processing: catch up every unprocessed week up to prevWeekId.
+        // The lock advances ONLY after each week succeeds so a failure can be
+        // retried on the next session instead of being silently skipped.
         try {
           const prevWeekId = getPreviousWeekId(currentWeekId)
           const meta = await getAppMeta()
-          if (meta.lastAutoProcessedWeekId !== prevWeekId) {
-            // Claim the lock first to prevent concurrent processing
-            await setAppMeta({ lastAutoProcessedWeekId: prevWeekId })
-            await runWeekEnd(prevWeekId, existing, abs)
+          const lastProcessed = meta.lastAutoProcessedWeekId
+
+          // Walk back from prevWeekId until we hit lastProcessed, building the queue.
+          const pending = []
+          let cursor = prevWeekId
+          for (let i = 0; i < 52 && cursor && cursor !== lastProcessed; i++) {
+            pending.unshift(cursor)
+            cursor = getPreviousWeekId(cursor)
+          }
+
+          // Fresh install (no lock yet) or unreachable lock: only process prevWeekId
+          // to avoid retroactively fining users on initial setup.
+          const weeksToProcess = (lastProcessed && cursor === lastProcessed)
+            ? pending
+            : (prevWeekId ? [prevWeekId] : [])
+
+          let usersForRun = existing
+          for (const wk of weeksToProcess) {
+            await runWeekEnd(wk, usersForRun, abs)
+            await setAppMeta({ lastAutoProcessedWeekId: wk })
+            // Refetch so the next iteration sees updated walletBalance / lives / etc.
+            usersForRun = await getUsers()
           }
         } catch (autoErr) {
-          console.warn('Auto week-end processing failed:', autoErr)
+          console.error('Auto week-end processing failed:', autoErr)
         }
 
         // Subscribe to real-time updates (with error handlers)
