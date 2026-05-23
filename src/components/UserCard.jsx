@@ -31,6 +31,7 @@ export default function UserCard({ status, justification }) {
   const {
     userId, user, sessions, totalRequired, frozen, partiallyFrozen,
     frozenSessions, goalMet, progress, canEarnLife,
+    inRecoveryWindow, remainingDebt, debtConsumedThisWeek,
   } = status
 
   const progressPct = Math.round(progress * 100)
@@ -108,6 +109,22 @@ export default function UserCard({ status, justification }) {
           />
         </div>
       </div>
+
+      {/* Recovery debt counter — only when inside a recovery window with debt left */}
+      {inRecoveryWindow && remainingDebt > 0 && (
+        <div className="mb-2">
+          <div className="flex justify-between text-sm mb-1">
+            <span className="text-cyan-400">🔄 Recuperación pendiente</span>
+            <span className="font-mono font-bold text-cyan-300">
+              {remainingDebt} ses.
+            </span>
+          </div>
+          <p className="text-[11px] text-gray-500 leading-tight">
+            {debtConsumedThisWeek > 0 && `Pagaste ${debtConsumedThisWeek} esta semana. `}
+            Cada sesión sobre la meta semanal dentro del rango ±3 baja la deuda.
+          </p>
+        </div>
+      )}
 
       {/* Stats row */}
       <div className="flex justify-between text-xs text-gray-400 mt-2">
