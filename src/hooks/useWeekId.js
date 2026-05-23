@@ -30,7 +30,7 @@ export function getWeekRange(weekId) {
   return { start: weekStart, end: weekEnd }
 }
 
-export function getAdjacentWeeks(weekId, before = 2, after = 2) {
+export function getAdjacentWeeks(weekId, before = 3, after = 3) {
   const { start } = getWeekRange(weekId)
   const weeks = []
   for (let i = -before; i <= after; i++) {
@@ -44,6 +44,38 @@ export function getAdjacentWeeks(weekId, before = 2, after = 2) {
 export function getPreviousWeekId(weekId) {
   const { start } = getWeekRange(weekId)
   return getWeekId(subWeeks(start, 1))
+}
+
+export function getNextWeekId(weekId) {
+  const { start } = getWeekRange(weekId)
+  return getWeekId(addWeeks(start, 1))
+}
+
+/** Inclusive list of weekIds between startWeekId and endWeekId (chronological). */
+export function getWeeksBetween(startWeekId, endWeekId) {
+  if (!startWeekId || !endWeekId) return []
+  const weeks = []
+  let cursor = startWeekId
+  for (let i = 0; i < 104; i++) {
+    weeks.push(cursor)
+    if (cursor === endWeekId) return weeks
+    cursor = getNextWeekId(cursor)
+  }
+  return weeks
+}
+
+/**
+ * Weeks within `padding` before startWeekId and after endWeekId (inclusive of
+ * the [start, end] range itself). Used to compute the auto-recovery window
+ * around a multi-week freeze.
+ */
+export function getRecoveryWindow(startWeekId, endWeekId, padding = 3) {
+  if (!startWeekId || !endWeekId) return []
+  const { start } = getWeekRange(startWeekId)
+  const earliest = getWeekId(addWeeks(start, -padding))
+  const { start: endStart } = getWeekRange(endWeekId)
+  const latest = getWeekId(addWeeks(endStart, padding))
+  return getWeeksBetween(earliest, latest)
 }
 
 export function formatWeekLabel(weekId) {

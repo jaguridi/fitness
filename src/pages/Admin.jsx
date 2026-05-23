@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext'
 import Avatar from '../components/Avatar'
 
 export default function Admin({ gameState }) {
-  const { processWeekEnd, currentWeekId } = gameState
+  const { processWeekEnd, currentWeekId, absences, refreshAbsences } = gameState
   const { currentUser, logout } = useAuth()
 
   return (
@@ -38,7 +38,7 @@ export default function Admin({ gameState }) {
 
       <RewindLock currentWeekId={currentWeekId} />
 
-      <AbsencePlanner />
+      <AbsencePlanner absences={absences} onChange={refreshAbsences} />
 
       <WeeklyHistory />
 

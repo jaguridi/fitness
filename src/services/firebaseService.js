@@ -155,6 +155,10 @@ export async function updateAbsence(absenceId, data) {
   await updateDoc(doc(db, 'absences', absenceId), data)
 }
 
+export async function deleteAbsence(absenceId) {
+  await deleteDoc(doc(db, 'absences', absenceId))
+}
+
 // ── All Workouts (Feed) ──────────────────────────────────────
 export function subscribeAllWorkouts(callback, onError, maxItems = 50) {
   const q = query(workoutsCol(), orderBy('createdAt', 'desc'), limit(maxItems))
