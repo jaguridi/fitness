@@ -38,7 +38,7 @@ export default function RewindLock({ currentWeekId }) {
 
   const handleRewind = async () => {
     if (!selectedWeek) {
-      setError('Elegí una semana primero.')
+      setError('Elige una semana primero.')
       return
     }
     const confirmed = confirm(
@@ -66,7 +66,7 @@ export default function RewindLock({ currentWeekId }) {
     <div className="bg-gray-800 rounded-2xl p-4 border border-gray-700">
       <h3 className="text-lg font-bold text-white mb-2">⏪ Reprocesar Semanas Pasadas</h3>
       <p className="text-sm text-gray-400 mb-3">
-        Rebobiná el lock de cierre automático para que la app reprocese semanas
+        Rebobina el lock de cierre automático para que la app reprocese semanas
         pasadas y reaplique multas perdidas. La app se recargará al confirmar.
       </p>
 
@@ -84,7 +84,7 @@ export default function RewindLock({ currentWeekId }) {
         disabled={submitting || done}
         className="w-full bg-gray-700 border border-gray-600 rounded-xl px-3 py-2 text-white mb-3"
       >
-        <option value="">— Elegí una semana —</option>
+        <option value="">— Elige una semana —</option>
         {pastWeeks.map((wk) => (
           <option key={wk} value={wk}>
             {wk} ({formatWeekLabel(wk)})
