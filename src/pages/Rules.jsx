@@ -1,4 +1,11 @@
-import { BASE_FINE, MAX_FINE, WEEKLY_GOAL, EXTRA_LIFE_THRESHOLD } from '../constants'
+import {
+  BASE_FINE,
+  MAX_FINE,
+  WEEKLY_GOAL,
+  EXTRA_LIFE_THRESHOLD,
+  EXTRAS_PER_FINE_REDEMPTION,
+  FINE_REDEMPTION_AMOUNT,
+} from '../constants'
 import { formatCLP } from '../constants'
 
 const sections = [
@@ -32,6 +39,18 @@ const sections = [
       'Máximo 1 vida por semana.',
       'Una vida te cubre automáticamente si te falta exactamente 1 sesión al cerrar la semana.',
       'Las vidas acumuladas se guardan hasta que se necesiten.',
+    ],
+  },
+  {
+    icon: '🏦',
+    title: 'Banco de extras (canje de multas)',
+    color: 'emerald',
+    items: [
+      `Cada sesión por encima de la meta semanal (${WEEKLY_GOAL}) se guarda como "extra" en tu banco personal.`,
+      `Cuando acumulas ${EXTRAS_PER_FINE_REDEMPTION} extras, se canjean automáticamente al cierre de semana: te descuentan ${formatCLP(FINE_REDEMPTION_AMOUNT)} de multa pendiente.`,
+      'Si no tienes multa al momento del canje, los extras quedan guardados (sin tope) y esperan a la próxima multa.',
+      'Las sesiones extra que ya se usaron para recuperar una semana congelada NO cuentan para el banco (no se contabilizan dos veces).',
+      'Tampoco cuentan las sesiones de semanas que perdiste — solo si cumples la meta de esa semana entera.',
     ],
   },
   {
@@ -95,14 +114,15 @@ const sections = [
 ]
 
 const colorMap = {
-  indigo: 'bg-indigo-600/10 border-indigo-600/30 text-indigo-400',
-  red:    'bg-red-600/10    border-red-600/30    text-red-400',
-  pink:   'bg-pink-600/10   border-pink-600/30   text-pink-400',
-  yellow: 'bg-yellow-600/10 border-yellow-600/30 text-yellow-400',
-  cyan:   'bg-cyan-600/10   border-cyan-600/30   text-cyan-400',
-  orange: 'bg-orange-600/10 border-orange-600/30 text-orange-400',
-  purple: 'bg-purple-600/10 border-purple-600/30 text-purple-400',
-  amber:  'bg-amber-600/10  border-amber-600/30  text-amber-400',
+  indigo:  'bg-indigo-600/10  border-indigo-600/30  text-indigo-400',
+  red:     'bg-red-600/10     border-red-600/30     text-red-400',
+  pink:    'bg-pink-600/10    border-pink-600/30    text-pink-400',
+  yellow:  'bg-yellow-600/10  border-yellow-600/30  text-yellow-400',
+  cyan:    'bg-cyan-600/10    border-cyan-600/30    text-cyan-400',
+  orange:  'bg-orange-600/10  border-orange-600/30  text-orange-400',
+  purple:  'bg-purple-600/10  border-purple-600/30  text-purple-400',
+  amber:   'bg-amber-600/10   border-amber-600/30   text-amber-400',
+  emerald: 'bg-emerald-600/10 border-emerald-600/30 text-emerald-400',
 }
 
 // ── Changelog ──────────────────────────────────────────────────────
@@ -112,6 +132,31 @@ const colorMap = {
 //   - Patch (vX.Y.Z): bugfixes, ajustes menores.
 // Más reciente primero.
 const CHANGELOG = [
+  {
+    version: 'v1.6.0',
+    date: '2026-05-25',
+    type: 'minor',
+    title: 'Banco de extras: canjea sesiones por multas',
+    items: [
+      `Cada sesión sobre la meta semanal se ahorra como "extra" en tu banco personal.`,
+      `Al acumular ${EXTRAS_PER_FINE_REDEMPTION} extras, se canjean automáticamente al cierre de semana: ${formatCLP(FINE_REDEMPTION_AMOUNT)} menos de multa.`,
+      'Los extras que pagan deuda de semanas congeladas NO entran al banco (no se cuentan dos veces).',
+      'Si no tienes multa al momento del canje, los extras quedan ahorrados sin tope.',
+      'Nuevo contador en tu tarjeta cuando tienes extras ahorrados o en camino.',
+    ],
+  },
+  {
+    version: 'v1.5.1',
+    date: '2026-05-25',
+    type: 'patch',
+    title: 'Fix de subida de fotos (memoria insuficiente)',
+    items: [
+      'Compresión de imagen libera memoria agresivamente (decodificación + canvas).',
+      'Preview con object URL en lugar de base64: ahorra varios MB de RAM por foto.',
+      'Detecta dispositivos con poca RAM (≤4 GB) y comprime más fuerte.',
+      'Mensajes de error específicos según tipo de fallo (cuota, permisos, conexión).',
+    ],
+  },
   {
     version: 'v1.5.0',
     date: '2026-05-23',

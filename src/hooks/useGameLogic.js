@@ -6,6 +6,8 @@ import {
   MAX_FINE,
   EXTRA_LIFE_THRESHOLD,
   MAX_LIVES_PER_WEEK,
+  EXTRAS_PER_FINE_REDEMPTION,
+  FINE_REDEMPTION_AMOUNT,
   getAvatarForMood,
 } from '../constants'
 import {
@@ -295,10 +297,32 @@ async function runWeekEnd(weekId, fetchedUsers, fetchedAbsences) {
       currentFineLevel = Math.min(MAX_FINE, currentFineLevel * 2)
     }
 
+    // ── Extras banking + auto-redemption ──────────────────────────────
+    // Bankable extras: sessions above WEEKLY_GOAL that weren't consumed by
+    // frozen-week debt. Only earned on weeks the goal was met outright (no
+    // extras when a fine was applied or justifications/lives covered a miss).
+    const weekExtras = (deficit <= 0)
+      ? Math.max(0, (sessions - recoverySessions - debtConsumed) - WEEKLY_GOAL)
+      : 0
+
+    let walletBalance = (user.walletBalance || 0) + fineApplied
+    let bankedExtras = (user.bankedExtras || 0) + weekExtras
+
+    let extrasRedeemed = 0
+    let fineReducedByCanje = 0
+    while (bankedExtras >= EXTRAS_PER_FINE_REDEMPTION && walletBalance > 0) {
+      const reduction = Math.min(FINE_REDEMPTION_AMOUNT, walletBalance)
+      walletBalance -= reduction
+      bankedExtras -= EXTRAS_PER_FINE_REDEMPTION
+      extrasRedeemed += 1
+      fineReducedByCanje += reduction
+    }
+
     userStateById[u.id] = {
       ...user,
       extraLives: newLives,
-      walletBalance: (user.walletBalance || 0) + fineApplied,
+      walletBalance,
+      bankedExtras,
       currentFineLevel,
       consecutiveMisses,
       consecutiveSuccesses,
@@ -307,7 +331,8 @@ async function runWeekEnd(weekId, fetchedUsers, fetchedAbsences) {
 
     await setUser(u.id, {
       extraLives: newLives,
-      walletBalance: (user.walletBalance || 0) + fineApplied,
+      walletBalance,
+      bankedExtras,
       currentFineLevel,
       consecutiveMisses,
       consecutiveSuccesses,
@@ -333,6 +358,10 @@ async function runWeekEnd(weekId, fetchedUsers, fetchedAbsences) {
       debtConsumed,
       deficit: Math.max(0, deficit),
       effectiveDeficit,
+      extrasBanked: weekExtras,
+      extrasRedeemed,
+      fineReducedByCanje,
+      bankedExtrasAfter: bankedExtras,
     })
   }
 
@@ -453,6 +482,7 @@ export default function useGameLogic() {
               consecutiveMisses: 0,
               consecutiveSuccesses: 0,
               hasShield: false,
+              bankedExtras: 0,
             })
           } else if (found.name !== u.name || found.avatar !== u.avatar) {
             // Always sync name/avatar from constants
@@ -639,6 +669,12 @@ export default function useGameLogic() {
         .filter((a) => a.userId === userId && !isLegacyAbsence(a) && a.status !== 'closed')
         .reduce((sum, a) => sum + (liveRecovery.remainingDebtByAbsence[a.id] || 0), 0)
 
+      const goalMet = sessions >= totalRequired
+      const bankedExtras = user.bankedExtras || 0
+      // What the bank will look like after this week's close, assuming the
+      // user keeps meeting the goal. Lets the UI preview the canje progress.
+      const bankedExtrasProjected = bankedExtras + (goalMet ? bonusSessions : 0)
+
       return {
         userId,
         user,
@@ -650,7 +686,7 @@ export default function useGameLogic() {
         bonusSessions,
         frozen: fullyFrozen,
         partiallyFrozen: !fullyFrozen && frozenSessions > 0,
-        goalMet: sessions >= totalRequired,
+        goalMet,
         progress: totalRequired > 0 ? Math.min(1, sessions / totalRequired) : 1,
         // Extras consumed by debt repayment don't count toward the extra life.
         canEarnLife:
@@ -659,6 +695,8 @@ export default function useGameLogic() {
         inRecoveryWindow,
         debtConsumedThisWeek,
         remainingDebt,
+        bankedExtras,
+        bankedExtrasProjected,
       }
     },
     [users, getSessionCount, absences, currentWeekId, liveRecovery]

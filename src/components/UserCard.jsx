@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { formatCLP } from '../constants'
+import { formatCLP, EXTRAS_PER_FINE_REDEMPTION, FINE_REDEMPTION_AMOUNT } from '../constants'
 import { useAuth } from '../context/AuthContext'
 import { sendNudge, getWorkoutsByUser } from '../services/firebaseService'
 import { getCurrentDayStreak } from '../utils/streaks'
@@ -32,6 +32,7 @@ export default function UserCard({ status, justification }) {
     userId, user, sessions, totalRequired, frozen, partiallyFrozen,
     frozenSessions, goalMet, progress, canEarnLife,
     inRecoveryWindow, remainingDebt, debtConsumedThisWeek,
+    bankedExtras = 0, bankedExtrasProjected = 0,
   } = status
 
   const progressPct = Math.round(progress * 100)
@@ -109,6 +110,31 @@ export default function UserCard({ status, justification }) {
           />
         </div>
       </div>
+
+      {/* Extras bank — only show when there's something to display */}
+      {bankedExtrasProjected > 0 && (
+        <div className="mb-2">
+          <div className="flex justify-between text-sm mb-1">
+            <span className="text-emerald-400">🏦 Extras ahorrados</span>
+            <span className="font-mono font-bold text-emerald-300">
+              {bankedExtras}
+              {bankedExtrasProjected !== bankedExtras && (
+                <span className="text-emerald-500/70 font-normal"> (+{bankedExtrasProjected - bankedExtras} esta semana)</span>
+              )}
+              <span className="text-gray-500 font-normal"> / {EXTRAS_PER_FINE_REDEMPTION}</span>
+            </span>
+          </div>
+          <div className="w-full bg-gray-700 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="h-full bg-emerald-500 rounded-full transition-all"
+              style={{ width: `${Math.min(100, (bankedExtrasProjected % EXTRAS_PER_FINE_REDEMPTION) / EXTRAS_PER_FINE_REDEMPTION * 100)}%` }}
+            />
+          </div>
+          <p className="text-[11px] text-gray-500 leading-tight mt-1">
+            Cada {EXTRAS_PER_FINE_REDEMPTION} extras borran {formatCLP(FINE_REDEMPTION_AMOUNT)} de multa al cierre de semana.
+          </p>
+        </div>
+      )}
 
       {/* Recovery debt counter — only when inside a recovery window with debt left */}
       {inRecoveryWindow && remainingDebt > 0 && (
