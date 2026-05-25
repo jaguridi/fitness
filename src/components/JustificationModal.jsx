@@ -4,7 +4,8 @@ import { addJustification, updateJustification, uploadJustificationPhoto } from 
 import { evaluateExcuse } from '../services/aiJudge'
 import { WEEKLY_GOAL } from '../constants'
 import Avatar from './Avatar'
-import { compressImageWithPreview } from '../utils/compressImage'
+import { compressImageWithPreview, readFileAsDataURL } from '../utils/compressImage'
+import { describeUploadError } from '../utils/uploadErrors'
 
 /**
  * Modal for submitting or editing/appealing a justification.
@@ -33,17 +34,25 @@ export default function JustificationModal({ weekId, existing = null, onClose, o
 
   const handlePhotoChange = async (e) => {
     const file = e.target.files[0]
-    if (file) {
+    if (!file) return
+
+    if (!file.size) {
+      setError('No se pudo leer la foto. Probablemente tu teléfono no tiene espacio libre — libera almacenamiento o usa una foto de la galería.')
+      return
+    }
+
+    try {
+      const { file: compressed, preview } = await compressImageWithPreview(file)
+      setPhoto(compressed)
+      setPhotoPreview(preview)
+    } catch (err) {
+      console.error('JustificationModal photo error:', err)
       try {
-        const { file: compressed, preview } = await compressImageWithPreview(file)
-        setPhoto(compressed)
+        setPhoto(file)
+        const preview = await readFileAsDataURL(file)
         setPhotoPreview(preview)
       } catch {
-        // Fallback: use original file
-        setPhoto(file)
-        const reader = new FileReader()
-        reader.onloadend = () => setPhotoPreview(reader.result)
-        reader.readAsDataURL(file)
+        setError('No se pudo procesar la foto. Cierra otras pestañas o libera espacio del teléfono.')
       }
     }
   }
@@ -107,7 +116,7 @@ export default function JustificationModal({ weekId, existing = null, onClose, o
       onResult?.(aiResult)
     } catch (err) {
       console.error('Justification error:', err)
-      setError('Error al enviar la justificación. Inténtalo de nuevo.')
+      setError(describeUploadError(err))
     } finally {
       setSubmitting(false)
     }

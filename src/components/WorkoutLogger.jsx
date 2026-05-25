@@ -1,12 +1,13 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { format } from 'date-fns'
 import { EXERCISE_TYPES } from '../constants'
 import { addWorkout, uploadWorkoutPhoto } from '../services/firebaseService'
 import { getWeekId } from '../hooks/useWeekId'
 import { useAuth } from '../context/AuthContext'
 import Avatar from './Avatar'
-import { compressImageWithPreview } from '../utils/compressImage'
+import { compressImageWithObjectURL } from '../utils/compressImage'
 import { validatePhotoDate } from '../utils/extractPhotoDate'
+import { describeUploadError } from '../utils/uploadErrors'
 
 export default function WorkoutLogger({ onClose, onSuccess }) {
   const { currentUser } = useAuth()
@@ -25,17 +26,43 @@ export default function WorkoutLogger({ onClose, onSuccess }) {
 
   const cameraInputRef = useRef(null)
   const galleryInputRef = useRef(null)
+  const previewUrlRef = useRef(null)
+
+  // Revoke the object URL when the preview changes or the component unmounts —
+  // otherwise the blob stays in memory until the page is closed.
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current)
+        previewUrlRef.current = null
+      }
+    }
+  }, [])
+
+  const replacePreview = (newUrl) => {
+    if (previewUrlRef.current && previewUrlRef.current !== newUrl) {
+      URL.revokeObjectURL(previewUrlRef.current)
+    }
+    previewUrlRef.current = newUrl
+    setPhotoPreview(newUrl)
+  }
 
   const processPhoto = async (file) => {
     if (!file) return
 
-    try {
-      // Compress image
-      const { file: compressed, preview } = await compressImageWithPreview(file)
-      setPhoto(compressed)
-      setPhotoPreview(preview)
+    // Guard: empty file usually means the camera failed to save (device storage full)
+    if (!file.size) {
+      setError('No se pudo leer la foto. Probablemente tu teléfono no tiene espacio libre — libera almacenamiento y vuelve a intentarlo, o usa la Galería con una foto ya guardada.')
+      return
+    }
 
-      // Validate EXIF date against reported date
+    try {
+      // Compress image with object-URL preview (cheap RAM-wise vs base64)
+      const { file: compressed, previewUrl } = await compressImageWithObjectURL(file)
+      setPhoto(compressed)
+      replacePreview(previewUrl)
+
+      // Validate EXIF date against reported date (reads only first 128KB, no decode)
       const validation = await validatePhotoDate(file, date)
       if (validation.message) {
         setDateWarning(validation)
@@ -47,13 +74,16 @@ export default function WorkoutLogger({ onClose, onSuccess }) {
       if (!validation.valid) {
         setError(validation.message)
       }
-    } catch {
-      // Fallback: use original file
-      setPhoto(file)
-      const reader = new FileReader()
-      reader.onloadend = () => setPhotoPreview(reader.result)
-      reader.readAsDataURL(file)
-      setDateWarning(null)
+    } catch (err) {
+      console.error('processPhoto error:', err)
+      // Fallback: skip compression entirely, show preview from raw blob URL
+      try {
+        setPhoto(file)
+        replacePreview(URL.createObjectURL(file))
+        setDateWarning(null)
+      } catch {
+        setError('No se pudo procesar la foto. Tu navegador puede estar sin memoria — cierra otras pestañas o libera espacio del teléfono y reintenta.')
+      }
     }
   }
 
@@ -98,7 +128,7 @@ export default function WorkoutLogger({ onClose, onSuccess }) {
       onClose?.()
     } catch (err) {
       console.error(err)
-      setError('Error al guardar. Revisa tu conexión e inténtalo de nuevo.')
+      setError(describeUploadError(err))
     } finally {
       setSubmitting(false)
     }
@@ -265,6 +295,13 @@ export default function WorkoutLogger({ onClose, onSuccess }) {
               className="hidden"
             />
 
+            {/* Tip when no photo selected yet */}
+            {!photoPreview && (
+              <p className="mt-1.5 text-[11px] text-gray-500">
+                💡 Si ves "Memoria insuficiente" o la cámara falla, cierra otras pestañas del navegador, o usa Galería con una foto ya tomada.
+              </p>
+            )}
+
             {/* Photo preview */}
             {photoPreview && (
               <div className="mt-2 relative">
@@ -277,6 +314,10 @@ export default function WorkoutLogger({ onClose, onSuccess }) {
                   type="button"
                   onClick={() => {
                     setPhoto(null)
+                    if (previewUrlRef.current) {
+                      URL.revokeObjectURL(previewUrlRef.current)
+                      previewUrlRef.current = null
+                    }
                     setPhotoPreview(null)
                     setDateWarning(null)
                     setError('')
