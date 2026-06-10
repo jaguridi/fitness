@@ -14,6 +14,8 @@ import {
   onSnapshot,
   serverTimestamp,
   deleteField,
+  arrayUnion,
+  runTransaction,
 } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { getFunctions, httpsCallable } from 'firebase/functions'
@@ -40,6 +42,19 @@ export async function getUser(userId) {
 
 export async function setUser(userId, data) {
   await setDoc(doc(db, 'users', userId), data, { merge: true })
+}
+
+/**
+ * Register an FCM token for a user. Tokens accumulate in the fcmTokens array
+ * so phone + desktop can both receive pushes; the legacy single fcmToken field
+ * is kept in sync for backwards compatibility. Cloud Functions read both and
+ * prune dead tokens on send.
+ */
+export async function addFcmToken(userId, token) {
+  await setDoc(doc(db, 'users', userId), {
+    fcmToken: token,
+    fcmTokens: arrayUnion(token),
+  }, { merge: true })
 }
 
 export function subscribeUsers(callback, onError) {
@@ -411,16 +426,13 @@ export async function removeReaction(workoutId, userId) {
  * Add a comment to a workout.
  * Comments are stored as an array field on the workout document.
  * Each comment: { userId, text, createdAt (ms timestamp) }
+ * arrayUnion appends atomically — two simultaneous comments can't overwrite
+ * each other (the old read-modify-write lost one of them).
  */
 export async function addComment(workoutId, userId, text) {
-  const workoutRef = doc(db, 'workouts', workoutId)
-  const snap = await getDoc(workoutRef)
-  if (!snap.exists()) throw new Error('Workout not found')
-
-  const existing = snap.data().comments || []
-  existing.push({ userId, text: text.trim(), createdAt: Date.now() })
-
-  await updateDoc(workoutRef, { comments: existing })
+  await updateDoc(doc(db, 'workouts', workoutId), {
+    comments: arrayUnion({ userId, text: text.trim(), createdAt: Date.now() }),
+  })
 }
 
 // ── Nudge ───────────────────────────────────────────────────────
@@ -497,6 +509,41 @@ export async function getAppMeta() {
 
 export async function setAppMeta(data) {
   await setDoc(metaDoc(), data, { merge: true })
+}
+
+// ── Week-end processing lock ─────────────────────────────────
+// Two devices opening the app at the same time used to both run the week-end
+// close (double fines). A Firestore transaction now "claims" each week before
+// processing: whoever wins the transaction processes it, everyone else skips.
+// The scheduled Cloud Function uses the same protocol server-side.
+
+const CLAIM_TTL_MS = 5 * 60 * 1000 // a crashed claimant's lock expires after 5 min
+
+/**
+ * Atomically claim `weekId` for processing.
+ * Returns false if the week was already processed or another device holds a
+ * fresh claim on it.
+ */
+export async function claimWeekProcessing(weekId) {
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(metaDoc())
+    const meta = snap.exists() ? snap.data() : {}
+    // Week ids ("2026-W23") compare correctly as strings.
+    if ((meta.lastAutoProcessedWeekId || '') >= weekId) return false
+    const p = meta.processing
+    const startedAt = p?.startedAt?.toMillis?.() ?? 0
+    if (p?.weekId === weekId && Date.now() - startedAt < CLAIM_TTL_MS) return false
+    tx.set(metaDoc(), { processing: { weekId, startedAt: serverTimestamp() } }, { merge: true })
+    return true
+  })
+}
+
+/** Mark `weekId` as processed and release the claim. */
+export async function completeWeekProcessing(weekId) {
+  await setDoc(metaDoc(), {
+    lastAutoProcessedWeekId: weekId,
+    processing: deleteField(),
+  }, { merge: true })
 }
 
 // ── Photo Upload ─────────────────────────────────────────────

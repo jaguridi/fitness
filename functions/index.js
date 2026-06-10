@@ -1,20 +1,40 @@
 /**
  * FitFamily — Firebase Cloud Functions
- * Scheduled push notification reminders via FCM.
  *
- * Schedules (America/Santiago = UTC-3 standard, UTC-4 DST):
- *   - Monday   09:00 → new week kickoff for everyone
- *   - Thursday 09:00 → mid-week reminder if behind (< 2 sessions)
- *   - Sunday   17:00 → last call if goal not yet met
+ * Scheduled (America/Santiago):
+ *   - Monday   00:10 → weeklyClose: server-side week-end settlement + result push
+ *   - Monday   09:00 → new week kickoff (state-aware)
+ *   - Thursday 09:00 → mid-week reminder if clearly behind (state-aware)
+ *   - Sunday   17:00 → last call if goal not yet met (state-aware)
+ *
+ * Firestore triggers (social pushes):
+ *   - workout created            → notify the rest of the family
+ *   - workout comment/reaction   → notify the workout owner
+ *   - justification pending_vote → notify the voters
+ *
+ * Game math lives in ./game/ — AUTO-GENERATED copies of src/game/ kept in sync
+ * by scripts/sync-game.mjs (wired as a predeploy hook in firebase.json).
  */
 
-const { onSchedule } = require('firebase-functions/v2/scheduler')
-const { onCall, HttpsError } = require('firebase-functions/v2/https')
-const { defineSecret } = require('firebase-functions/params')
-const { initializeApp } = require('firebase-admin/app')
-const { getFirestore } = require('firebase-admin/firestore')
-const { getMessaging } = require('firebase-admin/messaging')
-const Anthropic = require('@anthropic-ai/sdk')
+// All date math (week ids, day-of-week) must match the family's clocks.
+process.env.TZ = 'America/Santiago'
+
+import { onSchedule } from 'firebase-functions/v2/scheduler'
+import { onCall, HttpsError } from 'firebase-functions/v2/https'
+import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore'
+import { defineSecret } from 'firebase-functions/params'
+import { initializeApp } from 'firebase-admin/app'
+import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+import { getMessaging } from 'firebase-admin/messaging'
+import Anthropic from '@anthropic-ai/sdk'
+
+import { getWeekId, getPreviousWeekId } from './game/weekId.js'
+import {
+  computeWeekRequirements,
+  computeSessionsJustified,
+} from './game/absences.js'
+import { computeWeekEndOutcome, getSimulationWeeks } from './game/weekEnd.js'
+import { USER_IDS } from './game/constants.js'
 
 const anthropicApiKey = defineSecret('ANTHROPIC_API_KEY')
 
@@ -22,30 +42,36 @@ initializeApp()
 const db = getFirestore()
 const TIMEZONE = 'America/Santiago'
 
-// ── Week ID helper (mirrors client-side getWeekId) ────────────
-function getWeekId(date = new Date()) {
-  const jan1 = new Date(date.getFullYear(), 0, 1)
-  const jan1Day = jan1.getDay() || 7
-  const jan1Monday = new Date(date.getFullYear(), 0, 1 + (1 - jan1Day))
-  // Start of week (Monday)
-  const dayOfWeek = date.getDay() || 7 // 1=Mon ... 7=Sun
-  const weekStart = new Date(date)
-  weekStart.setDate(date.getDate() - (dayOfWeek - 1))
-  weekStart.setHours(0, 0, 0, 0)
-  const diff = weekStart - jan1Monday
-  const weekNum = Math.round(diff / (7 * 24 * 60 * 60 * 1000)) + 1
-  return `${weekStart.getFullYear()}-W${String(weekNum).padStart(2, '0')}`
-}
+const APP_ICON = 'https://jaguridi.github.io/fitness/avatars/jose.png'
 
-// ── Fetch users with FCM tokens ───────────────────────────────
-async function getUsersWithTokens() {
+const formatCLP = (amount) =>
+  new Intl.NumberFormat('es-CL', {
+    style: 'currency',
+    currency: 'CLP',
+    minimumFractionDigits: 0,
+  }).format(amount)
+
+// ── Firestore fetch helpers ───────────────────────────────────
+async function getAllUsers() {
   const snap = await db.collection('users').get()
-  return snap.docs
-    .map((d) => ({ id: d.id, ...d.data() }))
-    .filter((u) => u.fcmToken)
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
 }
 
-// ── Count workouts for a user this week ───────────────────────
+async function getAllAbsences() {
+  const snap = await db.collection('absences').get()
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
+async function getJustificationsForWeek(weekId) {
+  const snap = await db.collection('justifications').where('weekId', '==', weekId).get()
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
+async function getWorkoutsForWeek(weekId) {
+  const snap = await db.collection('workouts').where('weekId', '==', weekId).get()
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
 async function getSessionCount(userId, weekId) {
   const snap = await db
     .collection('workouts')
@@ -55,60 +81,130 @@ async function getSessionCount(userId, weekId) {
   return snap.size
 }
 
-// ── Send FCM message ─────────────────────────────────────────
-async function sendPush(token, title, body) {
+// ── Push helpers (multi-device) ───────────────────────────────
+// Tokens live in users/{id}.fcmTokens (array, one per device) with the legacy
+// single fcmToken field still honored. Dead tokens are pruned on send.
+
+function tokensFor(user) {
+  const tokens = [...(user.fcmTokens || []), user.fcmToken].filter(Boolean)
+  return [...new Set(tokens)]
+}
+
+const DEAD_TOKEN_CODES = new Set([
+  'messaging/registration-token-not-registered',
+  'messaging/invalid-registration-token',
+  'messaging/invalid-argument',
+])
+
+async function pruneToken(userId, token) {
   try {
-    await getMessaging().send({
-      token,
-      notification: { title, body },
-      webpush: {
-        notification: {
-          icon: 'https://jaguridi.github.io/fitness/avatars/jose.png',
-          badge: 'https://jaguridi.github.io/fitness/avatars/jose.png',
-          tag: 'fitfamily-reminder',
-        },
-      },
-    })
+    const ref = db.collection('users').doc(userId)
+    const snap = await ref.get()
+    if (!snap.exists) return
+    const data = snap.data()
+    const update = { fcmTokens: FieldValue.arrayRemove(token) }
+    if (data.fcmToken === token) update.fcmToken = FieldValue.delete()
+    await ref.update(update)
+    console.log(`Pruned dead FCM token for ${userId}`)
   } catch (err) {
-    // Token may be stale — log but don't crash
-    console.warn(`FCM send failed for token: ${err.message}`)
+    console.warn(`Could not prune token for ${userId}: ${err.message}`)
+  }
+}
+
+/** Send a push to every device a user has registered. */
+async function sendPushToUser(user, title, body, tag = 'fitfamily-reminder') {
+  const tokens = tokensFor(user)
+  if (tokens.length === 0) return
+  await Promise.all(tokens.map(async (token) => {
+    try {
+      await getMessaging().send({
+        token,
+        notification: { title, body },
+        webpush: {
+          notification: { icon: APP_ICON, badge: APP_ICON, tag },
+        },
+      })
+    } catch (err) {
+      if (DEAD_TOKEN_CODES.has(err.code)) {
+        await pruneToken(user.id, token)
+      } else {
+        console.warn(`FCM send failed for ${user.id}: ${err.message}`)
+      }
+    }
+  }))
+}
+
+// ── Week-state helper for reminders ───────────────────────────
+// What does this user still owe this week, accounting for frozen weeks,
+// legacy recovery sessions, and accepted/pending justifications?
+async function getWeekObligation(user, weekId, absences, justifications) {
+  const { totalRequired, fullyFrozen, recoverySessions } =
+    computeWeekRequirements(user.id, weekId, absences)
+  if (fullyFrozen) return { fullyFrozen: true, missing: 0, target: 0, sessions: 0, recoverySessions }
+  const justified = computeSessionsJustified(user.id, weekId, justifications)
+  const target = Math.max(0, totalRequired - justified)
+  const sessions = await getSessionCount(user.id, weekId)
+  return {
+    fullyFrozen: false,
+    target,
+    sessions,
+    missing: Math.max(0, target - sessions),
+    recoverySessions,
   }
 }
 
 // ── 1. Monday kickoff ─────────────────────────────────────────
-exports.mondayKickoff = onSchedule(
+export const mondayKickoff = onSchedule(
   { schedule: 'every monday 09:00', timeZone: TIMEZONE },
   async () => {
-    const users = await getUsersWithTokens()
+    const weekId = getWeekId()
+    const [users, absences] = await Promise.all([getAllUsers(), getAllAbsences()])
     await Promise.all(
-      users.map((u) =>
-        sendPush(
-          u.fcmToken,
+      users.map(async (u) => {
+        const { fullyFrozen, totalRequired, recoverySessions } =
+          computeWeekRequirements(u.id, weekId, absences)
+        if (fullyFrozen) {
+          await sendPushToUser(
+            u,
+            '🧊 Semana congelada',
+            `Hola ${u.name}! Esta semana está congelada para ti — descansa tranquilo.`
+          )
+          return
+        }
+        const extra = recoverySessions > 0
+          ? ` (incluye ${recoverySessions} de recuperación)`
+          : ''
+        await sendPushToUser(
+          u,
           '💪 ¡Nueva semana FitFamily!',
-          `Hola ${u.name}! Meta: 3 sesiones esta semana. ¡A moverse!`
+          `Hola ${u.name}! Meta: ${totalRequired} sesiones esta semana${extra}. ¡A moverse!`
         )
-      )
+      })
     )
     console.log(`Monday kickoff sent to ${users.length} users`)
   }
 )
 
 // ── 2. Thursday mid-week reminder ────────────────────────────
-exports.midweekReminder = onSchedule(
+export const midweekReminder = onSchedule(
   { schedule: 'every thursday 09:00', timeZone: TIMEZONE },
   async () => {
     const weekId = getWeekId()
-    const users = await getUsersWithTokens()
+    const [users, absences, justifications] = await Promise.all([
+      getAllUsers(),
+      getAllAbsences(),
+      getJustificationsForWeek(weekId),
+    ])
     await Promise.all(
       users.map(async (u) => {
-        const sessions = await getSessionCount(u.id, weekId)
-        if (sessions < 2) {
-          await sendPush(
-            u.fcmToken,
-            '⚠️ Recordatorio FitFamily',
-            `${u.name}, llevas ${sessions} sesión(es). ¡Quedan 3 días para completar la meta!`
-          )
-        }
+        const ob = await getWeekObligation(u, weekId, absences, justifications)
+        // Only nag when clearly behind (2+ sessions missing by Thursday).
+        if (ob.fullyFrozen || ob.missing < 2) return
+        await sendPushToUser(
+          u,
+          '⚠️ Recordatorio FitFamily',
+          `${u.name}, llevas ${ob.sessions} de ${ob.target} sesiones. ¡Quedan 4 días para completar la meta!`
+        )
       })
     )
     console.log(`Thursday reminder checked for ${users.length} users`)
@@ -116,30 +212,292 @@ exports.midweekReminder = onSchedule(
 )
 
 // ── 3. Sunday last call ───────────────────────────────────────
-exports.lastCallReminder = onSchedule(
+export const lastCallReminder = onSchedule(
   { schedule: 'every sunday 17:00', timeZone: TIMEZONE },
   async () => {
     const weekId = getWeekId()
-    const users = await getUsersWithTokens()
+    const [users, absences, justifications] = await Promise.all([
+      getAllUsers(),
+      getAllAbsences(),
+      getJustificationsForWeek(weekId),
+    ])
     await Promise.all(
       users.map(async (u) => {
-        const sessions = await getSessionCount(u.id, weekId)
-        if (sessions < 3) {
-          const missing = 3 - sessions
-          await sendPush(
-            u.fcmToken,
-            '🚨 ¡Último día FitFamily!',
-            `${u.name}, te falta${missing > 1 ? 'n' : ''} ${missing} sesión(es). ¡Hoy es el último día!`
-          )
-        }
+        const ob = await getWeekObligation(u, weekId, absences, justifications)
+        if (ob.fullyFrozen || ob.missing === 0) return
+        const lifeNote = ob.missing === 1 && (u.extraLives || 0) > 0
+          ? ' Tienes una vida 💖 que te salvaría, pero úsala con sabiduría.'
+          : ''
+        await sendPushToUser(
+          u,
+          '🚨 ¡Último día FitFamily!',
+          `${u.name}, te falta${ob.missing > 1 ? 'n' : ''} ${ob.missing} sesión(es). ¡Hoy es el último día!${lifeNote}`
+        )
       })
     )
     console.log(`Sunday last call checked for ${users.length} users`)
   }
 )
 
-// ── 4. Nudge — Send a motivational push to a family member ────
-exports.sendNudge = onCall(
+// ── 4. Weekly close — server-side settlement (Monday 00:10) ───
+// Mirrors the client's auto-processing exactly (same shared game logic, same
+// transactional claim on settings/meta), so whoever runs first wins and the
+// other side skips. With this in place the close no longer depends on someone
+// opening the app.
+
+const metaRef = () => db.collection('settings').doc('meta')
+const CLAIM_TTL_MS = 5 * 60 * 1000
+
+async function claimWeek(weekId) {
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(metaRef())
+    const meta = snap.exists ? snap.data() : {}
+    if ((meta.lastAutoProcessedWeekId || '') >= weekId) return false
+    const p = meta.processing
+    const startedAt = p?.startedAt?.toMillis?.() ?? 0
+    if (p?.weekId === weekId && Date.now() - startedAt < CLAIM_TTL_MS) return false
+    tx.set(metaRef(), { processing: { weekId, startedAt: FieldValue.serverTimestamp() } }, { merge: true })
+    return true
+  })
+}
+
+async function fetchSessionsByUserWeek(weekIds) {
+  const sessionsByUserWeek = {}
+  await Promise.all(weekIds.map(async (wk) => {
+    const ws = await getWorkoutsForWeek(wk)
+    for (const w of ws) {
+      if (!sessionsByUserWeek[w.userId]) sessionsByUserWeek[w.userId] = {}
+      sessionsByUserWeek[w.userId][wk] = (sessionsByUserWeek[w.userId][wk] || 0) + 1
+    }
+  }))
+  return sessionsByUserWeek
+}
+
+async function runWeekEndServer(weekId) {
+  const [users, absences, weekWorkouts, weekJustifications] = await Promise.all([
+    getAllUsers(),
+    getAllAbsences(),
+    getWorkoutsForWeek(weekId),
+    getJustificationsForWeek(weekId),
+  ])
+  const sessionsByUserWeek = await fetchSessionsByUserWeek(
+    getSimulationWeeks(weekId, absences)
+  )
+
+  const { userUpdates, summaries, absenceUpdates } = computeWeekEndOutcome({
+    weekId,
+    userIds: USER_IDS,
+    users,
+    absences,
+    weekWorkouts,
+    weekJustifications,
+    sessionsByUserWeek,
+  })
+
+  for (const { userId, data } of userUpdates) {
+    await db.collection('users').doc(userId).set(data, { merge: true })
+  }
+  for (const { userId, weekId: wk, data } of summaries) {
+    await db.collection('weekly_summaries').doc(`${userId}_${wk}`).set({
+      userId,
+      weekId: wk,
+      ...data,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true })
+  }
+  for (const { absenceId, data } of absenceUpdates) {
+    await db.collection('absences').doc(absenceId).update(data)
+  }
+}
+
+/** Push each user their result for the just-closed week. */
+async function sendWeekCloseResults(weekId) {
+  const [users, summSnap] = await Promise.all([
+    getAllUsers(),
+    db.collection('weekly_summaries').where('weekId', '==', weekId).get(),
+  ])
+  const totalPot = users.reduce((s, u) => s + (u.walletBalance || 0), 0)
+  const potNote = ` Pozo familiar: ${formatCLP(totalPot)}.`
+
+  await Promise.all(summSnap.docs.map(async (d) => {
+    const s = d.data()
+    const user = users.find((u) => u.id === s.userId)
+    if (!user) return
+
+    let title = '📋 Cierre de semana'
+    let body = ''
+    if (s.status === 'frozen') {
+      title = '🧊 Semana congelada'
+      body = 'Semana congelada — sin cambios para ti.'
+    } else if (s.status === 'missed') {
+      title = '💸 Semana no cumplida'
+      body = `Multa de ${formatCLP(s.fineApplied || 0)}.` +
+        ` Tu próxima multa sería ${formatCLP(user.currentFineLevel || 0)}.`
+      if (s.fineReducedByCanje > 0) {
+        body += ` Tus extras canjearon ${formatCLP(s.fineReducedByCanje)}. 🏦`
+      }
+    } else if (s.status === 'justified') {
+      title = '⚖️ Semana justificada'
+      body = 'Justificación aceptada — sin multa, pero la racha se reinicia.'
+    } else {
+      title = s.lifeUsed ? '💖 ¡Te salvó una vida!' : '✅ Semana cumplida'
+      body = s.lifeUsed
+        ? 'Usaste una vida extra para completar la meta.'
+        : `${s.sessions}/${s.totalRequired} sesiones. ¡Bien ahí!`
+      if (s.lifeEarned) body += ' Ganaste una vida extra 💖.'
+      if (s.shieldEarned) body += ' ¡Escudo activado! 🛡️'
+      if (s.extrasRedeemed > 0) body += ` Canjeaste extras por ${formatCLP(s.fineReducedByCanje)} 🏦.`
+    }
+
+    await sendPushToUser(user, title, body + potNote, 'fitfamily-weekclose')
+  }))
+}
+
+export const weeklyClose = onSchedule(
+  { schedule: 'every monday 00:10', timeZone: TIMEZONE, maxInstances: 1 },
+  async () => {
+    const currentWeekId = getWeekId()
+    const prevWeekId = getPreviousWeekId(currentWeekId)
+    const metaSnap = await metaRef().get()
+    const lastProcessed = metaSnap.exists ? metaSnap.data().lastAutoProcessedWeekId : undefined
+
+    // Walk back from prevWeekId until we hit lastProcessed, building the queue.
+    const pending = []
+    let cursor = prevWeekId
+    for (let i = 0; i < 52 && cursor && cursor !== lastProcessed; i++) {
+      pending.unshift(cursor)
+      cursor = getPreviousWeekId(cursor)
+    }
+    // No lock yet (fresh install): only process the week that just ended.
+    const weeksToProcess = (lastProcessed && cursor === lastProcessed)
+      ? pending
+      : (prevWeekId ? [prevWeekId] : [])
+
+    let processed = 0
+    for (const wk of weeksToProcess) {
+      const claimed = await claimWeek(wk)
+      if (!claimed) {
+        console.log(`weeklyClose: ${wk} already claimed/processed, stopping`)
+        break
+      }
+      await runWeekEndServer(wk)
+      await metaRef().set({
+        lastAutoProcessedWeekId: wk,
+        processing: FieldValue.delete(),
+      }, { merge: true })
+      processed++
+      console.log(`weeklyClose: processed ${wk}`)
+    }
+
+    // Always notify results for the week that just ended, no matter who closed it.
+    await sendWeekCloseResults(prevWeekId)
+    console.log(`weeklyClose: done (${processed} week(s) processed, results sent for ${prevWeekId})`)
+  }
+)
+
+// ── 5. Social pushes — workout / comments / reactions / votes ──
+
+function formatTypes(workout) {
+  if (Array.isArray(workout?.exerciseType)) return workout.exerciseType.join(' + ')
+  return workout?.exerciseType || 'Ejercicio'
+}
+
+const truncate = (s, n) => (s && s.length > n ? `${s.slice(0, n - 1)}…` : s || '')
+
+export const onWorkoutCreated = onDocumentCreated(
+  { document: 'workouts/{workoutId}', maxInstances: 3 },
+  async (event) => {
+    const w = event.data?.data()
+    if (!w?.userId) return
+    const users = await getAllUsers()
+    const owner = users.find((u) => u.id === w.userId)
+    const name = owner?.name || 'Alguien'
+    const body = `${formatTypes(w)} · ${w.duration || '?'} min. ¡A seguirle el ritmo!`
+    await Promise.all(
+      users
+        .filter((u) => u.id !== w.userId)
+        .map((u) => sendPushToUser(u, `💪 ${name} entrenó`, body, 'fitfamily-social'))
+    )
+  }
+)
+
+export const onWorkoutUpdated = onDocumentUpdated(
+  { document: 'workouts/{workoutId}', maxInstances: 3 },
+  async (event) => {
+    const before = event.data?.before?.data()
+    const after = event.data?.after?.data()
+    if (!before || !after?.userId) return
+
+    const users = await getAllUsers()
+    const owner = users.find((u) => u.id === after.userId)
+    if (!owner) return
+
+    // New comments → notify the workout owner
+    const beforeCount = before.comments?.length || 0
+    const afterComments = after.comments || []
+    for (const c of afterComments.slice(beforeCount)) {
+      if (!c?.userId || c.userId === owner.id) continue
+      const commenter = users.find((u) => u.id === c.userId)
+      await sendPushToUser(
+        owner,
+        `💬 ${commenter?.name || 'Alguien'} comentó tu ejercicio`,
+        truncate(c.text, 120),
+        'fitfamily-social'
+      )
+    }
+
+    // New/changed reactions → notify the workout owner
+    const beforeReactions = before.reactions || {}
+    for (const [uid, emoji] of Object.entries(after.reactions || {})) {
+      if (uid === owner.id || beforeReactions[uid] === emoji) continue
+      const reactor = users.find((u) => u.id === uid)
+      await sendPushToUser(
+        owner,
+        `${emoji} ${reactor?.name || 'Alguien'} reaccionó`,
+        `A tu ${formatTypes(after)} del ${after.date || 'otro día'}.`,
+        'fitfamily-social'
+      )
+    }
+  }
+)
+
+async function notifyPendingVote(justification) {
+  const users = await getAllUsers()
+  const owner = users.find((u) => u.id === justification.userId)
+  const name = owner?.name || 'Alguien'
+  await Promise.all(
+    users
+      .filter((u) => u.id !== justification.userId)
+      .map((u) => sendPushToUser(
+        u,
+        `⚖️ ${name} necesita tu voto`,
+        `Su justificación va a votación familiar: "${truncate(justification.excuse, 80)}"`,
+        'fitfamily-vote'
+      ))
+  )
+}
+
+export const onJustificationCreated = onDocumentCreated(
+  { document: 'justifications/{justificationId}', maxInstances: 3 },
+  async (event) => {
+    const j = event.data?.data()
+    if (j?.status === 'pending_vote') await notifyPendingVote(j)
+  }
+)
+
+export const onJustificationUpdated = onDocumentUpdated(
+  { document: 'justifications/{justificationId}', maxInstances: 3 },
+  async (event) => {
+    const before = event.data?.before?.data()
+    const after = event.data?.after?.data()
+    if (after?.status === 'pending_vote' && before?.status !== 'pending_vote') {
+      await notifyPendingVote(after)
+    }
+  }
+)
+
+// ── 6. Nudge — Send a motivational push to a family member ────
+export const sendNudge = onCall(
   { maxInstances: 5 },
   async (request) => {
     const { targetUserId, senderName } = request.data
@@ -152,8 +510,8 @@ exports.sendNudge = onCall(
       throw new HttpsError('not-found', 'Target user not found.')
     }
 
-    const target = targetSnap.data()
-    if (!target.fcmToken) {
+    const target = { id: targetSnap.id, ...targetSnap.data() }
+    if (tokensFor(target).length === 0) {
       return { success: false, reason: 'El usuario no tiene notificaciones activas.' }
     }
 
@@ -166,13 +524,13 @@ exports.sendNudge = onCall(
     ]
     const body = nudgeMessages[Math.floor(Math.random() * nudgeMessages.length)]
 
-    await sendPush(target.fcmToken, '👊 ¡Empujón FitFamily!', body)
+    await sendPushToUser(target, '👊 ¡Empujón FitFamily!', body, 'fitfamily-nudge')
     return { success: true }
   }
 )
 
-// ── 5. Weekly Recap — Generate a fun AI-powered summary ───────
-exports.generateWeeklyRecap = onCall(
+// ── 7. Weekly Recap — Generate a fun AI-powered summary ───────
+export const generateWeeklyRecap = onCall(
   { secrets: [anthropicApiKey], maxInstances: 2 },
   async (request) => {
     const { weekId } = request.data
@@ -252,8 +610,8 @@ Si alguien ganó un escudo o vida extra, celébralo. Si alguien pagó multa, men
   }
 )
 
-// ── 5b. Monthly Recap — Generate a fun AI-powered monthly summary ──
-exports.generateMonthlyRecap = onCall(
+// ── 7b. Monthly Recap — Generate a fun AI-powered monthly summary ──
+export const generateMonthlyRecap = onCall(
   { secrets: [anthropicApiKey], maxInstances: 2 },
   async (request) => {
     const { monthId } = request.data // format: "YYYY-MM"
@@ -402,7 +760,7 @@ No uses markdown. Solo texto plano con saltos de línea. Máximo 3 emojis en tot
   }
 )
 
-// ── 6. AI Judge — Evaluate justifications with Claude ─────────
+// ── 8. AI Judge — Evaluate justifications with Claude ─────────
 
 const AI_JUDGE_PROMPT = `Eres el juez estricto pero justo del reto fitness familiar "FitFamily".
 
@@ -435,7 +793,7 @@ Si adjunta una imagen, evalúala como evidencia.
 Responde SOLO con un JSON válido (sin markdown, sin backticks):
 {"valid": true/false, "reason": "explicación breve en español de máximo 2 frases"}`
 
-exports.evaluateJustification = onCall(
+export const evaluateJustification = onCall(
   { secrets: [anthropicApiKey], maxInstances: 5 },
   async (request) => {
     const { excuse, photoBase64 } = request.data

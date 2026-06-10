@@ -1,6 +1,6 @@
 import { getToken, onMessage } from 'firebase/messaging'
 import { messagingPromise } from '../firebase'
-import { setUser } from './firebaseService'
+import { addFcmToken } from './firebaseService'
 
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY
 
@@ -22,7 +22,7 @@ export async function registerPushToken(userId) {
 
     const token = await getToken(messaging, { vapidKey: VAPID_KEY })
     if (token) {
-      await setUser(userId, { fcmToken: token })
+      await addFcmToken(userId, token)
     }
     return token
   } catch (err) {
