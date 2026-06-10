@@ -4,6 +4,7 @@ import { EXERCISE_TYPES } from '../constants'
 import { addWorkout, uploadWorkoutPhoto } from '../services/firebaseService'
 import { getWeekId } from '../hooks/useWeekId'
 import { useAuth } from '../context/AuthContext'
+import useEscapeToClose from '../hooks/useEscapeToClose'
 import Avatar from './Avatar'
 import { compressImageWithObjectURL } from '../utils/compressImage'
 import { validatePhotoDate } from '../utils/extractPhotoDate'
@@ -12,6 +13,7 @@ import { describeUploadError } from '../utils/uploadErrors'
 export default function WorkoutLogger({ onClose, onSuccess }) {
   const { currentUser } = useAuth()
   const userId = currentUser?.id || ''
+  useEscapeToClose(onClose)
 
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [exerciseTypes, setExerciseTypes] = useState([]) // array now
@@ -113,7 +115,7 @@ export default function WorkoutLogger({ onClose, onSuccess }) {
       const weekId = getWeekId(new Date(date + 'T12:00:00'))
 
       const caloriesValue = calories.trim() ? parseInt(calories) : null
-      await addWorkout({
+      const workout = {
         userId,
         date,
         weekId,
@@ -122,9 +124,10 @@ export default function WorkoutLogger({ onClose, onSuccess }) {
         ...(caloriesValue && caloriesValue > 0 ? { calories: caloriesValue } : {}),
         description,
         photoURL,
-      })
+      }
+      await addWorkout(workout)
 
-      onSuccess?.()
+      onSuccess?.(workout)
       onClose?.()
     } catch (err) {
       console.error(err)
@@ -136,7 +139,7 @@ export default function WorkoutLogger({ onClose, onSuccess }) {
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
-      <div className="bg-gray-800 w-full max-w-lg rounded-t-3xl sm:rounded-2xl max-h-[90vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" aria-label="Registrar ejercicio" className="bg-gray-800 w-full max-w-lg rounded-t-3xl sm:rounded-2xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-700">
           <h2 className="text-xl font-bold text-white">📝 Registrar Ejercicio</h2>

@@ -133,6 +133,21 @@ const colorMap = {
 // Más reciente primero.
 const CHANGELOG = [
   {
+    version: 'v1.7.0',
+    date: '2026-06-10',
+    type: 'minor',
+    title: 'Cierre automático confiable, notificaciones sociales y app más rápida',
+    items: [
+      'El cierre de semana ahora corre solo en el servidor (lunes 00:10) — ya no depende de que alguien abra la app, y es imposible que se aplique dos veces.',
+      'Push del resultado del cierre cada lunes: si cumpliste, tu multa, vidas y el pozo actualizado.',
+      'Notificaciones cuando alguien de la familia entrena, comenta tu ejercicio, reacciona o necesita tu voto.',
+      'Los recordatorios ahora saben si tu semana está congelada o justificada (no más avisos de más).',
+      'Notificaciones en varios dispositivos a la vez (teléfono y computador).',
+      'La app abre sin conexión (modo offline) y carga mucho más rápido: avatares 50 veces más livianos.',
+      'Tu PIN ahora se guarda cifrado.',
+    ],
+  },
+  {
     version: 'v1.6.0',
     date: '2026-05-25',
     type: 'minor',

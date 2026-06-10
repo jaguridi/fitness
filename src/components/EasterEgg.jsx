@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { USERS } from '../constants'
+import useEscapeToClose from '../hooks/useEscapeToClose'
 
 // ─── Secret title assignment ──────────────────────────────────────────────────
 const FALLBACK_TITLES = [
@@ -91,6 +92,7 @@ function generateConfetti() {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function EasterEgg({ users: firestoreUsers, onClose }) {
+  useEscapeToClose(onClose)
   const pieces = useMemo(generateConfetti, [])
   const titles = useMemo(() => assignSecretTitles(firestoreUsers), [firestoreUsers])
 

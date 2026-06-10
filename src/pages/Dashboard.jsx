@@ -19,6 +19,10 @@ import { DashboardSkeleton } from '../components/Skeleton'
 export default function Dashboard({ gameState }) {
   const { currentUser } = useAuth()
   const [showLogger, setShowLogger] = useState(false)
+  // Session count captured when the logger opens — the live subscription may
+  // already include the just-logged workout by the time onSuccess fires, so
+  // counting from "open time + 1" avoids double-counting (or missing) it.
+  const sessionsAtOpen = useRef(0)
   const [celebration, setCelebration] = useState(null) // 'goal' | 'life' | 'shield' | 'overachiever' | null
   const [showJustification, setShowJustification] = useState(false)
   const [existingJustification, setExistingJustification] = useState(null) // null = no justification, object = existing
@@ -77,9 +81,11 @@ export default function Dashboard({ gameState }) {
   } = gameState
 
   // Detect celebration type after logging a workout
-  const detectCelebration = useCallback(() => {
+  const detectCelebration = useCallback((workout) => {
     if (!currentUser) return
-    const sessions = getSessionCount(currentUser.id) + 1 // +1 for the just-logged one
+    // A workout logged for a past week shouldn't trigger this week's party.
+    if (workout?.weekId && workout.weekId !== currentWeekId) return
+    const sessions = sessionsAtOpen.current + 1 // count at open + the just-logged one
     const recovery = getRecoverySessions(currentUser.id)
     const frozen = isWeekFrozen(currentUser.id)
     if (frozen) return
@@ -96,7 +102,7 @@ export default function Dashboard({ gameState }) {
     } else if (sessions === totalRequired) {
       setCelebration('goal')
     }
-  }, [currentUser, getSessionCount, getRecoverySessions, isWeekFrozen, users])
+  }, [currentUser, currentWeekId, getRecoverySessions, isWeekFrozen, users])
 
   // Check if current user already submitted a justification for this week
   useEffect(() => {
@@ -281,7 +287,10 @@ export default function Dashboard({ gameState }) {
 
       {/* FAB - Register workout */}
       <button
-        onClick={() => setShowLogger(true)}
+        onClick={() => {
+          sessionsAtOpen.current = currentUser ? getSessionCount(currentUser.id) : 0
+          setShowLogger(true)
+        }}
         className="fixed bottom-6 right-6 w-16 h-16 bg-indigo-600 hover:bg-indigo-500 rounded-full shadow-2xl flex items-center justify-center text-3xl active:scale-90 transition-all z-40"
         aria-label="Registrar ejercicio"
       >
@@ -292,8 +301,8 @@ export default function Dashboard({ gameState }) {
       {showLogger && (
         <WorkoutLogger
           onClose={() => setShowLogger(false)}
-          onSuccess={() => {
-            detectCelebration()
+          onSuccess={(workout) => {
+            detectCelebration(workout)
             setShowLogger(false)
           }}
         />

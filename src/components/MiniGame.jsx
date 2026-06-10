@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { USERS } from '../constants'
+import useEscapeToClose from '../hooks/useEscapeToClose'
 
 // ── Game items with weighted spawn probability ─────────────────────────────────
 const COLLECTIBLES = [
@@ -34,6 +35,7 @@ function laneX(lane) {
 
 // ── Component ──────────────────────────────────────────────────────────────────
 export default function MiniGame({ currentUser, onClose }) {
+  useEscapeToClose(onClose)
   const containerRef = useRef(null)
   const frameRef = useRef(null)
   const prevTs = useRef(0)

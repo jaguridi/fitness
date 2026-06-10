@@ -42,3 +42,9 @@ yarn-error.log*
 SESSION_SUMMARY.md
 *.tmp
 *.bak
+
+# Vite leftovers (config bundles abandoned after a crash)
+vite.config.js.timestamp-*
+
+# PWA dev artifacts
+dev-dist

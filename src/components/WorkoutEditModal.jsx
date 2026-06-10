@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { EXERCISE_TYPES, getExerciseTypes } from '../constants'
 import { updateWorkout, deleteWorkout } from '../services/firebaseService'
+import useEscapeToClose from '../hooks/useEscapeToClose'
 
 /**
  * Edit modal for an owned workout, within the 24h window.
@@ -8,6 +9,7 @@ import { updateWorkout, deleteWorkout } from '../services/firebaseService'
  * checks and week summaries. Only the lightweight fields can be tweaked.
  */
 export default function WorkoutEditModal({ workout, onClose, onSaved, onDeleted }) {
+  useEscapeToClose(onClose)
   const [exerciseTypes, setExerciseTypes] = useState(getExerciseTypes(workout))
   const [duration, setDuration] = useState(String(workout.duration || ''))
   const [calories, setCalories] = useState(

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
+import useEscapeToClose from '../hooks/useEscapeToClose'
 import { addJustification, updateJustification, uploadJustificationPhoto } from '../services/firebaseService'
 import { evaluateExcuse } from '../services/aiJudge'
 import { WEEKLY_GOAL } from '../constants'
@@ -21,6 +22,7 @@ import { describeUploadError } from '../utils/uploadErrors'
  */
 export default function JustificationModal({ weekId, existing = null, onClose, onResult }) {
   const { currentUser } = useAuth()
+  useEscapeToClose(onClose)
   const isAppeal = !!existing
   const [excuse, setExcuse] = useState(existing?.excuse || '')
   const [sessionsJustified, setSessionsJustified] = useState(
