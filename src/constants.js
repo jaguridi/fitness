@@ -45,19 +45,17 @@ export function getAvatarForMood(userConst, userFirestore) {
   return userConst.avatarMoods.normal
 }
 
-// Game rules
-export const WEEKLY_GOAL = 3
-export const BASE_FINE = 5000
-export const MAX_FINE = 40000
-export const EXTRA_LIFE_THRESHOLD = 5
-export const MAX_LIVES_PER_WEEK = 1
-
-// Extras → fine redemption: bank N sessions above WEEKLY_GOAL (and not consumed
-// by frozen-week debt) and auto-redeem each batch for FINE_REDEMPTION_AMOUNT
-// off the wallet at week-end. Carries forward indefinitely; redeems whenever a
-// pending fine exists.
-export const EXTRAS_PER_FINE_REDEMPTION = 10
-export const FINE_REDEMPTION_AMOUNT = BASE_FINE
+// Game rules live in src/game/constants.js (pure module shared with Cloud
+// Functions); re-exported here so UI imports keep working unchanged.
+export {
+  WEEKLY_GOAL,
+  BASE_FINE,
+  MAX_FINE,
+  EXTRA_LIFE_THRESHOLD,
+  MAX_LIVES_PER_WEEK,
+  EXTRAS_PER_FINE_REDEMPTION,
+  FINE_REDEMPTION_AMOUNT,
+} from './game/constants.js'
 
 // Exercise types
 export const EXERCISE_TYPES = [
