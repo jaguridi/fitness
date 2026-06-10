@@ -1,0 +1,35 @@
+rules_version = '2';
+
+// FitFamily — Storage rules. Photos are publicly readable (the feed links to
+// them directly); writes are confined to the two paths the app uses, must be
+// images, and are capped at 10 MB (client compresses well below that).
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isKnownUser(id) {
+      return id in ['user1', 'user2', 'user3', 'user4'];
+    }
+
+    function isReasonableImage() {
+      return request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    match /workouts/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isKnownUser(userId) && isReasonableImage();
+      allow delete: if false;
+    }
+
+    match /justifications/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isKnownUser(userId) && isReasonableImage();
+      allow delete: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
