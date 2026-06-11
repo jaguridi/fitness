@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { Plus } from 'lucide-react'
 import { USERS, WEEKLY_GOAL, EXTRA_LIFE_THRESHOLD } from '../constants'
 import { formatWeekLabel } from '../hooks/useWeekId'
 import { useAuth } from '../context/AuthContext'
@@ -159,7 +160,11 @@ export default function Dashboard({ gameState }) {
     )
   }
 
-  const statuses = USERS.map((u) => getUserWeekStatus(u.id)).filter(Boolean)
+  // Logged-in user's card first; the rest keep their usual order
+  const statuses = [...USERS]
+    .sort((a, b) => (a.id === currentUser?.id ? -1 : b.id === currentUser?.id ? 1 : 0))
+    .map((u) => getUserWeekStatus(u.id))
+    .filter(Boolean)
 
   return (
     <div className="space-y-4 pb-24">
@@ -175,6 +180,18 @@ export default function Dashboard({ gameState }) {
           📅 {formatWeekLabel(currentWeekId)}
         </p>
       </div>
+
+      {/* Pending justification votes from other family members — action required, so on top */}
+      {currentUser && pendingJustifications
+        .filter((j) => j.userId !== currentUser.id)
+        .map((j) => (
+          <JustificationVoteCard
+            key={j.id}
+            justification={j}
+            currentUserId={currentUser.id}
+          />
+        ))
+      }
 
       {/* Pot — tap 10× to unlock mini-game */}
       <div onClick={handlePotTap} className="select-none">
@@ -270,18 +287,6 @@ export default function Dashboard({ gameState }) {
         return null
       })()}
 
-      {/* Pending justification votes from other family members */}
-      {currentUser && pendingJustifications
-        .filter((j) => j.userId !== currentUser.id)
-        .map((j) => (
-          <JustificationVoteCard
-            key={j.id}
-            justification={j}
-            currentUserId={currentUser.id}
-          />
-        ))
-      }
-
       {/* Wall of shame */}
       <WallOfShame users={users} />
 
@@ -291,10 +296,10 @@ export default function Dashboard({ gameState }) {
           sessionsAtOpen.current = currentUser ? getSessionCount(currentUser.id) : 0
           setShowLogger(true)
         }}
-        className="fixed bottom-6 right-6 w-16 h-16 bg-indigo-600 hover:bg-indigo-500 rounded-full shadow-2xl flex items-center justify-center text-3xl active:scale-90 transition-all z-40"
+        className="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] right-6 w-16 h-16 bg-indigo-600 hover:bg-indigo-500 rounded-full shadow-2xl flex items-center justify-center text-white active:scale-90 transition-all z-40"
         aria-label="Registrar ejercicio"
       >
-        ➕
+        <Plus size={30} strokeWidth={2.5} aria-hidden="true" />
       </button>
 
       {/* Workout Logger Modal */}

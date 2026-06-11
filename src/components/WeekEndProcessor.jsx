@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { toast } from 'sonner'
 
 export default function WeekEndProcessor({ onProcess, currentWeekId }) {
   const [processing, setProcessing] = useState(false)
@@ -12,7 +13,7 @@ export default function WeekEndProcessor({ onProcess, currentWeekId }) {
       setDone(true)
     } catch (err) {
       console.error(err)
-      alert('Error al procesar la semana.')
+      toast.error('Error al procesar la semana.')
     } finally {
       setProcessing(false)
     }

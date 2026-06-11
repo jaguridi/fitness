@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { USERS, getExerciseTypes, formatExerciseTypes } from '../constants'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -76,7 +77,7 @@ export default function Feed() {
       await flagWorkout(workout.id, currentUser.id, workout.userId)
       setFlagging(null)
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
       setFlagging(null)
     }
   }
@@ -105,7 +106,7 @@ export default function Feed() {
       }
     } catch (err) {
       console.error('Vote error:', err)
-      alert('Error al votar. Intenta de nuevo.')
+      toast.error('Error al votar. Intenta de nuevo.')
     }
   }
 
