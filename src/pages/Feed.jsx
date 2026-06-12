@@ -18,6 +18,8 @@ import {
 import Avatar from '../components/Avatar'
 import WorkoutEditModal, { canEditWorkout } from '../components/WorkoutEditModal'
 import { FeedCardSkeleton } from '../components/Skeleton'
+import Card from '../components/ui/Card'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 
 export default function Feed() {
   const { currentUser } = useAuth()
@@ -168,10 +170,10 @@ export default function Feed() {
       </div>
 
       {workouts.length === 0 && justifications.length === 0 && unlocks.length === 0 ? (
-        <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700 text-center">
+        <Card className="p-6 text-center">
           <div className="text-4xl mb-2">🏃</div>
           <p className="text-gray-400">Aún no hay actividad. ¡Sé el primero!</p>
-        </div>
+        </Card>
       ) : (
         <div className="space-y-4">
           {/* Merge workouts, justifications and achievement unlocks into one timeline */}
@@ -550,46 +552,29 @@ export default function Feed() {
         if (!workout) return null
         const owner = getUserInfo(workout.userId)
         return (
-          <div
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-            onClick={() => setFlagging(null)}
-          >
-            <div
-              className="bg-gray-800 rounded-2xl p-6 max-w-sm w-full space-y-4 border border-gray-700"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="text-center">
-                <div className="text-4xl mb-2">🚩</div>
-                <h3 className="text-lg font-bold text-white">Reportar ejercicio</h3>
-              </div>
-              <div className="flex items-center gap-3 bg-gray-700/50 rounded-xl p-3">
-                <Avatar src={owner.avatar} name={owner.name} size="sm" />
-                <div>
-                  <p className="font-semibold text-white text-sm">{owner.name}</p>
-                  <p className="text-xs text-gray-400">{formatExerciseTypes(workout)} · {workout.date}</p>
-                </div>
-              </div>
-              <p className="text-sm text-gray-300 text-center">
+          <ConfirmDialog
+            icon="🚩"
+            title="Reportar ejercicio"
+            message={
+              <>
                 ¿Crees que esta foto no corresponde a ejercicio real?
                 Tu voto contará automáticamente como <span className="text-red-400 font-semibold">"Falsa"</span>.
                 Los demás miembros votarán también.
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setFlagging(null)}
-                  className="flex-1 py-3 rounded-xl font-bold text-gray-400 bg-gray-700 hover:bg-gray-600 transition-all"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => handleFlag(workout)}
-                  className="flex-1 py-3 rounded-xl font-bold bg-red-600 hover:bg-red-500 text-white transition-all active:scale-95"
-                >
-                  🚩 Reportar
-                </button>
+              </>
+            }
+            confirmLabel="🚩 Reportar"
+            danger
+            onConfirm={() => handleFlag(workout)}
+            onCancel={() => setFlagging(null)}
+          >
+            <div className="flex items-center gap-3 bg-gray-700/50 rounded-xl p-3">
+              <Avatar src={owner.avatar} name={owner.name} size="sm" />
+              <div>
+                <p className="font-semibold text-white text-sm">{owner.name}</p>
+                <p className="text-xs text-gray-400">{formatExerciseTypes(workout)} · {workout.date}</p>
               </div>
             </div>
-          </div>
+          </ConfirmDialog>
         )
       })()}
 

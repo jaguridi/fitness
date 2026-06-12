@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
-import useEscapeToClose from '../hooks/useEscapeToClose'
 import { addJustification, updateJustification, uploadJustificationPhoto } from '../services/firebaseService'
 import { evaluateExcuse } from '../services/aiJudge'
 import { WEEKLY_GOAL } from '../constants'
 import Avatar from './Avatar'
 import { compressImageWithPreview, readFileAsDataURL } from '../utils/compressImage'
 import { describeUploadError } from '../utils/uploadErrors'
+import Modal, { ModalHeader } from './ui/Modal'
 
 /**
  * Modal for submitting or editing/appealing a justification.
@@ -22,7 +22,6 @@ import { describeUploadError } from '../utils/uploadErrors'
  */
 export default function JustificationModal({ weekId, existing = null, onClose, onResult }) {
   const { currentUser } = useAuth()
-  useEscapeToClose(onClose)
   const isAppeal = !!existing
   const [excuse, setExcuse] = useState(existing?.excuse || '')
   const [sessionsJustified, setSessionsJustified] = useState(
@@ -130,22 +129,13 @@ export default function JustificationModal({ weekId, existing = null, onClose, o
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
-      <div className="bg-gray-800 w-full max-w-lg rounded-t-3xl sm:rounded-2xl max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-700">
-          <h2 className="text-xl font-bold text-white">
-            {isAppeal ? '✏️ Editar y Apelar' : '⚖️ Justificación'}
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white text-2xl leading-none"
-          >
-            ✕
-          </button>
-        </div>
+    <Modal onClose={onClose} ariaLabel={isAppeal ? 'Editar y apelar justificación' : 'Justificación'}>
+      <ModalHeader
+        title={isAppeal ? '✏️ Editar y Apelar' : '⚖️ Justificación'}
+        onClose={onClose}
+      />
 
-        <div className="p-4 space-y-4">
+      <div className="p-4 space-y-4">
           {/* User indicator */}
           <div className="flex items-center gap-3 bg-gray-700/50 rounded-xl p-3">
             <Avatar src={currentUser?.avatar} name={currentUser?.name} size="md" />
@@ -351,8 +341,7 @@ export default function JustificationModal({ weekId, existing = null, onClose, o
               </div>
             </div>
           )}
-        </div>
       </div>
-    </div>
+    </Modal>
   )
 }

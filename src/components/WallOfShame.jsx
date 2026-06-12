@@ -1,5 +1,6 @@
 import { formatCLP } from '../constants'
 import Avatar from './Avatar'
+import Card from './ui/Card'
 
 export default function WallOfShame({ users }) {
   const usersWithFines = users
@@ -8,16 +9,16 @@ export default function WallOfShame({ users }) {
 
   if (usersWithFines.length === 0) {
     return (
-      <div className="bg-gray-800 rounded-2xl p-4 border border-gray-700 text-center">
+      <Card className="p-4 text-center">
         <p className="text-green-400 font-semibold">
           🎉 ¡Sin multas pendientes! ¡Sigan así!
         </p>
-      </div>
+      </Card>
     )
   }
 
   return (
-    <div className="bg-gray-800 rounded-2xl p-4 border border-gray-700">
+    <Card className="p-4">
       <h3 className="text-lg font-bold text-red-400 mb-3 flex items-center gap-2">
         🔥 Muro de la Vergüenza
       </h3>
@@ -37,6 +38,6 @@ export default function WallOfShame({ users }) {
           </div>
         ))}
       </div>
-    </div>
+    </Card>
   )
 }

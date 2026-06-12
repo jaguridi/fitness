@@ -4,6 +4,7 @@ import { getUserSummaries, getWorkoutsByUser } from '../services/firebaseService
 import Avatar from '../components/Avatar'
 import MonthlyRecap from '../components/MonthlyRecap'
 import { StatsSkeleton } from '../components/Skeleton'
+import Card, { SectionCard } from '../components/ui/Card'
 
 const MAX_BAR_H = 72 // px — max bar height in the chart
 const TIMEFRAMES = [
@@ -307,10 +308,9 @@ export default function Stats({ gameState }) {
       </div>
 
       {/* ── Leaderboard ─────────────────────────────────────── */}
-      <div className="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between gap-2">
-          <h3 className="font-bold text-white text-sm">🏆 Clasificación familiar</h3>
-          {/* Sort selector */}
+      <SectionCard
+        title="🏆 Clasificación familiar"
+        aside={
           <div className="flex gap-1 flex-wrap justify-end">
             {[
               { id: 'rate', label: '%', title: 'Cumplimiento' },
@@ -335,7 +335,8 @@ export default function Stats({ gameState }) {
               </button>
             ))}
           </div>
-        </div>
+        }
+      >
         {leaderboard.map((u, i) => (
           <div
             key={u.id}
@@ -460,7 +461,7 @@ export default function Stats({ gameState }) {
             </div>
           </div>
         ))}
-      </div>
+      </SectionCard>
 
       {/* ── Timeframe selector ───────────────────────────────── */}
       <div className="flex items-center justify-end gap-1.5">
@@ -481,11 +482,10 @@ export default function Stats({ gameState }) {
       </div>
 
       {/* ── Multi-user weekly comparison ─────────────────────── */}
-      <div className="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-700">
-          <h3 className="font-bold text-white text-sm">📈 Comparación semanal</h3>
-          <p className="text-xs text-gray-500 mt-0.5">Sesiones por semana — todos los miembros</p>
-        </div>
+      <SectionCard
+        title="📈 Comparación semanal"
+        subtitle="Sesiones por semana — todos los miembros"
+      >
         <div className="p-4">
           {comparisonData.length === 0 ? (
             <p className="text-gray-500 text-sm text-center py-6">Sin historial aún</p>
@@ -534,14 +534,13 @@ export default function Stats({ gameState }) {
             </>
           )}
         </div>
-      </div>
+      </SectionCard>
 
       {/* ── Exercise distribution comparison ─────────────────── */}
-      <div className="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-700">
-          <h3 className="font-bold text-white text-sm">🎯 Top ejercicios por persona</h3>
-          <p className="text-xs text-gray-500 mt-0.5">Los 3 deportes más practicados</p>
-        </div>
+      <SectionCard
+        title="🎯 Top ejercicios por persona"
+        subtitle="Los 3 deportes más practicados"
+      >
         <div className="divide-y divide-gray-700/50">
           {exerciseDistribution.map((u) => (
             <div key={u.id} className="px-4 py-3 flex items-center gap-3">
@@ -572,10 +571,10 @@ export default function Stats({ gameState }) {
             </div>
           ))}
         </div>
-      </div>
+      </SectionCard>
 
       {/* ── Per-user detail ──────────────────────────────────── */}
-      <div className="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden">
+      <Card className="overflow-hidden">
         {/* User selector */}
         <div className="grid grid-cols-4 border-b border-gray-700">
           {USERS.map((u) => {
@@ -755,7 +754,7 @@ export default function Stats({ gameState }) {
             </>
           )}
         </div>
-      </div>
+      </Card>
     </div>
   )
 }

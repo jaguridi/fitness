@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { getAppMeta, setAppMeta } from '../services/firebaseService'
 import { getPreviousWeekId, formatWeekLabel } from '../hooks/useWeekId'
+import Card from './ui/Card'
+import ConfirmDialog from './ui/ConfirmDialog'
 
 function buildPastWeeks(currentWeekId, count = 30) {
   const weeks = []
@@ -24,6 +26,7 @@ function buildPastWeeks(currentWeekId, count = 30) {
 export default function RewindLock({ currentWeekId }) {
   const [currentLock, setCurrentLock] = useState(null)
   const [selectedWeek, setSelectedWeek] = useState('')
+  const [confirming, setConfirming] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState('')
@@ -36,18 +39,17 @@ export default function RewindLock({ currentWeekId }) {
       .catch((err) => setError(err.message || 'No se pudo leer el lock actual.'))
   }, [])
 
-  const handleRewind = async () => {
+  const handleRewind = () => {
     if (!selectedWeek) {
       setError('Elige una semana primero.')
       return
     }
-    const confirmed = confirm(
-      `Vas a fijar el lock en ${selectedWeek}.\n\n` +
-      `Al recargar la app, se reprocesarán todas las semanas entre ${selectedWeek} y ${getPreviousWeekId(currentWeekId)} en orden, aplicando las multas que correspondan según los workouts/justificaciones de cada semana.\n\n` +
-      `¿Continuar?`
-    )
-    if (!confirmed) return
+    setError('')
+    setConfirming(true)
+  }
 
+  const doRewind = async () => {
+    setConfirming(false)
     setSubmitting(true)
     setError('')
     try {
@@ -63,7 +65,7 @@ export default function RewindLock({ currentWeekId }) {
   }
 
   return (
-    <div className="bg-gray-800 rounded-2xl p-4 border border-gray-700">
+    <Card className="p-4">
       <h3 className="text-lg font-bold text-white mb-2">⏪ Reprocesar Semanas Pasadas</h3>
       <p className="text-sm text-gray-400 mb-3">
         Rebobina el lock de cierre automático para que la app reprocese semanas
@@ -111,6 +113,18 @@ export default function RewindLock({ currentWeekId }) {
           ? '✅ Lock actualizado — recargando...'
           : '⏪ Rebobinar y reprocesar'}
       </button>
-    </div>
+
+      {confirming && (
+        <ConfirmDialog
+          icon="⏪"
+          title={`¿Fijar el lock en ${selectedWeek}?`}
+          message={`Al recargar la app, se reprocesarán todas las semanas entre ${selectedWeek} y ${getPreviousWeekId(currentWeekId)} en orden, aplicando las multas que correspondan según los workouts y justificaciones de cada semana.`}
+          confirmLabel="Rebobinar"
+          danger
+          onConfirm={doRewind}
+          onCancel={() => setConfirming(false)}
+        />
+      )}
+    </Card>
   )
 }

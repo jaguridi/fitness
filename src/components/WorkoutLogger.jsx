@@ -4,8 +4,8 @@ import { EXERCISE_TYPES } from '../constants'
 import { addWorkout, uploadWorkoutPhoto } from '../services/firebaseService'
 import { getWeekId } from '../hooks/useWeekId'
 import { useAuth } from '../context/AuthContext'
-import useEscapeToClose from '../hooks/useEscapeToClose'
 import Avatar from './Avatar'
+import Modal, { ModalHeader } from './ui/Modal'
 import { compressImageWithObjectURL } from '../utils/compressImage'
 import { validatePhotoDate } from '../utils/extractPhotoDate'
 import { describeUploadError } from '../utils/uploadErrors'
@@ -13,7 +13,6 @@ import { describeUploadError } from '../utils/uploadErrors'
 export default function WorkoutLogger({ onClose, onSuccess }) {
   const { currentUser } = useAuth()
   const userId = currentUser?.id || ''
-  useEscapeToClose(onClose)
 
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [exerciseTypes, setExerciseTypes] = useState([]) // array now
@@ -138,20 +137,10 @@ export default function WorkoutLogger({ onClose, onSuccess }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
-      <div role="dialog" aria-modal="true" aria-label="Registrar ejercicio" className="bg-gray-800 w-full max-w-lg rounded-t-3xl sm:rounded-2xl max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-700">
-          <h2 className="text-xl font-bold text-white">📝 Registrar Ejercicio</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white text-2xl leading-none"
-          >
-            ✕
-          </button>
-        </div>
+    <Modal onClose={onClose} ariaLabel="Registrar ejercicio">
+      <ModalHeader title="📝 Registrar Ejercicio" onClose={onClose} />
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+      <form onSubmit={handleSubmit} className="p-4 space-y-4">
           {/* Logged-in user indicator */}
           <div className="flex items-center gap-3 bg-gray-700/50 rounded-xl p-3">
             <Avatar src={currentUser?.avatar} name={currentUser?.name} size="md" />
@@ -377,7 +366,6 @@ export default function WorkoutLogger({ onClose, onSuccess }) {
             {submitting ? '⏳ Guardando...' : '💪 Registrar Sesión'}
           </button>
         </form>
-      </div>
-    </div>
+    </Modal>
   )
 }

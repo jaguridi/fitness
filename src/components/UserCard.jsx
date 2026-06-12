@@ -6,6 +6,7 @@ import { sendNudge, getWorkoutsByUser } from '../services/firebaseService'
 import { getCurrentDayStreak } from '../utils/streaks'
 import Avatar from './Avatar'
 import AchievementBadges from './AchievementBadges'
+import Card from './ui/Card'
 
 export default function UserCard({ status, justification }) {
   const navigate = useNavigate()
@@ -40,9 +41,9 @@ export default function UserCard({ status, justification }) {
   const emptyHearts = '🤍'.repeat(Math.max(0, 3 - (user.extraLives || 0)))
 
   return (
-    <div
+    <Card
       onClick={() => navigate(`/user/${userId}`)}
-      className="bg-gray-800 rounded-2xl p-4 shadow-lg border border-gray-700 cursor-pointer hover:border-indigo-500/50 transition-all active:scale-[0.98]"
+      className="p-4 shadow-lg cursor-pointer hover:border-indigo-500/50 transition-all active:scale-[0.98]"
     >
       {/* Header */}
       <div className="flex items-center gap-3 mb-3">
@@ -208,6 +209,6 @@ export default function UserCard({ status, justification }) {
           )}
         </div>
       )}
-    </div>
+    </Card>
   )
 }

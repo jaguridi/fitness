@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { registerPushToken } from '../services/notificationService'
+import Modal from './ui/Modal'
 
 const STORAGE_KEY = 'fitfamily_onboarded'
 
@@ -156,16 +157,21 @@ export default function OnboardingModal({ userId, onDone }) {
   )
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
-      <div className="bg-gray-800 rounded-3xl border border-gray-700 w-full max-w-sm p-6 space-y-2">
-        {/* Progress dots */}
-        <div className="flex justify-center gap-2 mb-2">
-          <div className={`w-2 h-2 rounded-full ${step === 0 ? 'bg-indigo-400' : 'bg-gray-600'}`} />
-          <div className={`w-2 h-2 rounded-full ${step === 1 ? 'bg-indigo-400' : 'bg-gray-600'}`} />
-        </div>
-
-        {step === 0 ? <InstallStep /> : <NotifStep />}
+    <Modal
+      variant="center"
+      maxWidth="max-w-sm"
+      dim="bg-black/80"
+      rounded="rounded-3xl"
+      panelClassName="border border-gray-700 p-6 space-y-2"
+      ariaLabel="Bienvenida"
+    >
+      {/* Progress dots */}
+      <div className="flex justify-center gap-2 mb-2">
+        <div className={`w-2 h-2 rounded-full ${step === 0 ? 'bg-indigo-400' : 'bg-gray-600'}`} />
+        <div className={`w-2 h-2 rounded-full ${step === 1 ? 'bg-indigo-400' : 'bg-gray-600'}`} />
       </div>
-    </div>
+
+      {step === 0 ? <InstallStep /> : <NotifStep />}
+    </Modal>
   )
 }

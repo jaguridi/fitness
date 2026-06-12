@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
+import Card from './ui/Card'
+import ConfirmDialog from './ui/ConfirmDialog'
 
 export default function WeekEndProcessor({ onProcess, currentWeekId }) {
+  const [confirming, setConfirming] = useState(false)
   const [processing, setProcessing] = useState(false)
   const [done, setDone] = useState(false)
 
   const handleProcess = async () => {
-    if (!confirm('¿Estás seguro de cerrar esta semana y calcular multas/vidas?')) return
+    setConfirming(false)
     setProcessing(true)
     try {
       await onProcess(currentWeekId)
@@ -20,14 +23,14 @@ export default function WeekEndProcessor({ onProcess, currentWeekId }) {
   }
 
   return (
-    <div className="bg-gray-800 rounded-2xl p-4 border border-gray-700">
+    <Card className="p-4">
       <h3 className="text-lg font-bold text-white mb-2">⚙️ Cierre Semanal</h3>
       <p className="text-sm text-gray-400 mb-3">
         Ejecuta el cierre de la semana actual para calcular multas, vidas ganadas y
         vidas consumidas. Solo hazlo cuando la semana haya terminado.
       </p>
       <button
-        onClick={handleProcess}
+        onClick={() => setConfirming(true)}
         disabled={processing || done}
         className={`w-full py-3 rounded-xl font-bold transition-all ${
           processing || done
@@ -41,6 +44,18 @@ export default function WeekEndProcessor({ onProcess, currentWeekId }) {
           ? '✅ Semana procesada'
           : '🔒 Cerrar Semana y Calcular'}
       </button>
-    </div>
+
+      {confirming && (
+        <ConfirmDialog
+          icon="🔒"
+          title="¿Cerrar la semana?"
+          message="Se calcularán multas, vidas ganadas y vidas consumidas. Hazlo solo cuando la semana haya terminado."
+          confirmLabel="Cerrar semana"
+          danger
+          onConfirm={handleProcess}
+          onCancel={() => setConfirming(false)}
+        />
+      )}
+    </Card>
   )
 }

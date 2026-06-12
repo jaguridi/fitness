@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { EXERCISE_TYPES, getExerciseTypes } from '../constants'
 import { updateWorkout, deleteWorkout } from '../services/firebaseService'
-import useEscapeToClose from '../hooks/useEscapeToClose'
+import Modal, { ModalHeader } from './ui/Modal'
 
 /**
  * Edit modal for an owned workout, within the 24h window.
@@ -9,7 +9,6 @@ import useEscapeToClose from '../hooks/useEscapeToClose'
  * checks and week summaries. Only the lightweight fields can be tweaked.
  */
 export default function WorkoutEditModal({ workout, onClose, onSaved, onDeleted }) {
-  useEscapeToClose(onClose)
   const [exerciseTypes, setExerciseTypes] = useState(getExerciseTypes(workout))
   const [duration, setDuration] = useState(String(workout.duration || ''))
   const [calories, setCalories] = useState(
@@ -60,22 +59,10 @@ export default function WorkoutEditModal({ workout, onClose, onSaved, onDeleted 
   }
 
   return (
-    <div
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center"
-      onClick={onClose}
-    >
-      <div
-        className="bg-gray-800 w-full max-w-lg rounded-t-3xl sm:rounded-2xl max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between p-4 border-b border-gray-700">
-          <h2 className="text-xl font-bold text-white">✏️ Editar Ejercicio</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">
-            ✕
-          </button>
-        </div>
+    <Modal onClose={onClose} closeOnBackdrop ariaLabel="Editar ejercicio">
+      <ModalHeader title="✏️ Editar Ejercicio" onClose={onClose} />
 
-        <div className="p-4 space-y-4">
+      <div className="p-4 space-y-4">
           <div className="bg-amber-900/15 border border-amber-700/30 rounded-xl p-2 text-xs text-amber-300">
             ⓘ Solo puedes editar dentro de las primeras 24h. La foto y fecha no se pueden cambiar.
           </div>
@@ -203,9 +190,8 @@ export default function WorkoutEditModal({ workout, onClose, onSaved, onDeleted 
               </button>
             </div>
           )}
-        </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 

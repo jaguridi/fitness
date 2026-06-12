@@ -13,6 +13,8 @@ import {
 } from '../hooks/useWeekId'
 import Avatar from './Avatar'
 import { useAuth } from '../context/AuthContext'
+import Card from './ui/Card'
+import ConfirmDialog from './ui/ConfirmDialog'
 
 function weekIdFromDate(dateStr) {
   if (!dateStr) return null
@@ -39,6 +41,7 @@ export default function AbsencePlanner({ absences = [], onChange }) {
   const [endDate, setEndDate] = useState(today)
   const [sessionsByWeek, setSessionsByWeek] = useState({}) // { weekId: 1..3 }
   const [editingId, setEditingId] = useState(null)
+  const [deleteId, setDeleteId] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -113,8 +116,9 @@ export default function AbsencePlanner({ absences = [], onChange }) {
     setSuccess('')
   }
 
-  const handleDelete = async (id) => {
-    if (!confirm('¿Eliminar este congelamiento? Si tenías deuda, se recalculará el siguiente cierre semanal.')) return
+  const handleDelete = async () => {
+    const id = deleteId
+    setDeleteId(null)
     try {
       await deleteAbsence(id)
       if (editingId === id) resetForm()
@@ -179,7 +183,7 @@ export default function AbsencePlanner({ absences = [], onChange }) {
   }, [absences, userId])
 
   return (
-    <div className="bg-gray-800 rounded-2xl p-4 border border-gray-700">
+    <Card className="p-4">
       <h3 className="text-lg font-bold text-white mb-4">✈️ Congelar Semanas</h3>
 
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -345,7 +349,7 @@ export default function AbsencePlanner({ absences = [], onChange }) {
                       )}
                       <button
                         type="button"
-                        onClick={() => handleDelete(a.id)}
+                        onClick={() => setDeleteId(a.id)}
                         className="bg-red-600/20 text-red-300 hover:bg-red-600/30 text-xs font-semibold px-2 py-1 rounded-lg"
                       >
                         🗑️
@@ -358,6 +362,18 @@ export default function AbsencePlanner({ absences = [], onChange }) {
           </div>
         </div>
       )}
-    </div>
+
+      {deleteId && (
+        <ConfirmDialog
+          icon="🗑️"
+          title="¿Eliminar congelamiento?"
+          message="Si tenías deuda de recuperación, se recalculará en el siguiente cierre semanal."
+          confirmLabel="Eliminar"
+          danger
+          onConfirm={handleDelete}
+          onCancel={() => setDeleteId(null)}
+        />
+      )}
+    </Card>
   )
 }

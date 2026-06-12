@@ -3,6 +3,7 @@ import { Dumbbell, BookOpen, Wrench, LogOut, ChevronRight } from 'lucide-react'
 import { USERS, getAvatarForMood, formatCLP } from '../constants'
 import { useAuth } from '../context/AuthContext'
 import Avatar from '../components/Avatar'
+import Card from '../components/ui/Card'
 
 const MENU_ITEMS = [
   {
@@ -43,7 +44,7 @@ export default function Perfil({ gameState }) {
       <h2 className="text-2xl font-black text-white text-center">Perfil</h2>
 
       {/* User header */}
-      <div className="bg-gray-800 rounded-2xl p-4 border border-gray-700 flex items-center gap-4">
+      <Card className="p-4 flex items-center gap-4">
         <Avatar
           src={getAvatarForMood(userConst, firestoreUser)}
           name={currentUser.name}
@@ -60,10 +61,10 @@ export default function Perfil({ gameState }) {
             </span>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Menu */}
-      <div className="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden divide-y divide-gray-700/50">
+      <Card className="overflow-hidden divide-y divide-gray-700/50">
         {MENU_ITEMS.map(({ icon: Icon, label, desc, to }) => (
           <button
             key={label}
@@ -80,7 +81,7 @@ export default function Perfil({ gameState }) {
             <ChevronRight size={16} className="text-gray-600 shrink-0" aria-hidden="true" />
           </button>
         ))}
-      </div>
+      </Card>
 
       {/* Logout */}
       <button
