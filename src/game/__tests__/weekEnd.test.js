@@ -271,8 +271,8 @@ describe('debt consumption interactions', () => {
 })
 
 describe('absence settlement', () => {
-  // Window of a W19–W20 freeze ends exactly on WEEK (=W23).
-  const FROZEN = { '2026-W19': 3, '2026-W20': 3 }
+  // Window of a W18–W19 freeze (±4 active weeks) ends exactly on WEEK (=W23).
+  const FROZEN = { '2026-W18': 3, '2026-W19': 3 }
 
   function settlementScenario({ paidExtras, userOverrides = {} }) {
     const absence = { id: 'a1', userId: 'user1', frozenWeeks: FROZEN }
@@ -296,7 +296,7 @@ describe('absence settlement', () => {
     const update = outcome.absenceUpdates.find((u) => u.absenceId === 'a1')
     expect(update.data).toMatchObject({ status: 'closed', debtUnpaid: 0, fineApplied: 0 })
     // No retroactive missed summaries
-    expect(outcome.summaries.filter((s) => s.weekId === '2026-W19')).toHaveLength(0)
+    expect(outcome.summaries.filter((s) => s.weekId === '2026-W18')).toHaveLength(0)
   })
 
   it('fines proportionally and marks frozen weeks missed when debt remains', () => {
@@ -313,11 +313,11 @@ describe('absence settlement', () => {
     expect(update.data.fineApplied).toBe(Math.round((5000 * 4) / WEEKLY_GOAL))
 
     // Retroactive missed summaries on both frozen weeks, shares summing to the fine
+    const w18 = outcome.summaries.find((s) => s.weekId === '2026-W18')
     const w19 = outcome.summaries.find((s) => s.weekId === '2026-W19')
-    const w20 = outcome.summaries.find((s) => s.weekId === '2026-W20')
+    expect(w18.data.status).toBe('missed')
     expect(w19.data.status).toBe('missed')
-    expect(w20.data.status).toBe('missed')
-    expect(w19.data.fineApplied + w20.data.fineApplied).toBe(update.data.fineApplied)
+    expect(w18.data.fineApplied + w19.data.fineApplied).toBe(update.data.fineApplied)
 
     // Wallet and escalation reflect the settlement on top of the weekly close
     const settlementUpdate = outcome.userUpdates.filter((u) => u.userId === 'user1').at(-1)
@@ -327,7 +327,7 @@ describe('absence settlement', () => {
   })
 
   it('does not settle before the window ends', () => {
-    const absence = { id: 'a1', userId: 'user1', frozenWeeks: { '2026-W21': 3 } } // window ends W24
+    const absence = { id: 'a1', userId: 'user1', frozenWeeks: { '2026-W21': 3 } } // window ends W25 (±4)
     const outcome = computeWeekEndOutcome({
       weekId: WEEK,
       userIds: USER_IDS,

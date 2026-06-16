@@ -27,12 +27,28 @@ describe('absence schema helpers', () => {
       .toEqual({ '2026-W10': 3, '2026-W11': 3 })
   })
 
-  it('builds the ±3 recovery window around the frozen range', () => {
+  it('builds the ±4 recovery window around the frozen range', () => {
     const a = { userId: U, frozenWeeks: { '2026-W10': 3, '2026-W11': 3 } }
     const window = getAbsenceRecoveryWindow(a)
-    expect(window[0]).toBe('2026-W07')
-    expect(window[window.length - 1]).toBe('2026-W14')
-    expect(window).toHaveLength(8)
+    expect(window[0]).toBe('2026-W06')
+    expect(window[window.length - 1]).toBe('2026-W15')
+    expect(window).toHaveLength(10) // 4 before + 2 range + 4 after
+  })
+
+  it('skips a second freeze when counting the ±4 active weeks', () => {
+    // a1 freezes W10; a2 freezes W12 (inside a1's would-be window). a1's window
+    // must skip W12 and extend to W15 to still reach 4 active weeks after.
+    const a1 = { id: 'a1', userId: U, frozenWeeks: { '2026-W10': 3 } }
+    const a2 = { id: 'a2', userId: U, frozenWeeks: { '2026-W12': 3 } }
+    const window = getAbsenceRecoveryWindow(a1, [a1, a2])
+    expect(window).not.toContain('2026-W12')
+    expect(window).toContain('2026-W15')
+    // 4 active before (W06–W09) + range (W10) + 4 active after (W11,W13,W14,W15; W12 skipped)
+    expect(window).toEqual([
+      '2026-W06', '2026-W07', '2026-W08', '2026-W09',
+      '2026-W10',
+      '2026-W11', '2026-W13', '2026-W14', '2026-W15',
+    ])
   })
 })
 

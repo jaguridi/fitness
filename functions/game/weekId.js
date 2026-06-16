@@ -101,17 +101,35 @@ export function getWeeksBetween(startWeekId, endWeekId) {
 }
 
 /**
- * Weeks within `padding` before startWeekId and after endWeekId (inclusive of
- * the [start, end] range itself). Used to compute the auto-recovery window
- * around a multi-week freeze.
+ * Recovery window around a multi-week freeze: the [start, end] range itself,
+ * plus `padding` ACTIVE (non-frozen) weeks before and after it.
+ *
+ * Weeks listed in `frozenWeeks` (e.g. a second freeze) are skipped entirely —
+ * they neither count toward the padding nor appear in the window — so the
+ * window walks outward until it gathers `padding` genuinely active weeks on
+ * each side. With no `frozenWeeks`, the result is a contiguous span.
  */
-export function getRecoveryWindow(startWeekId, endWeekId, padding = 3) {
+export function getRecoveryWindow(startWeekId, endWeekId, padding = 4, frozenWeeks = null) {
   if (!startWeekId || !endWeekId) return []
-  const { start } = getWeekRange(startWeekId)
-  const earliest = getWeekId(addDaysLocal(start, -padding * 7))
-  const { start: endStart } = getWeekRange(endWeekId)
-  const latest = getWeekId(addDaysLocal(endStart, padding * 7))
-  return getWeeksBetween(earliest, latest)
+  const skip = frozenWeeks instanceof Set ? frozenWeeks : new Set(frozenWeeks || [])
+
+  const before = []
+  let cursor = getPreviousWeekId(startWeekId)
+  for (let guard = 0; guard < 104 && before.length < padding; guard++) {
+    if (!skip.has(cursor)) before.unshift(cursor)
+    cursor = getPreviousWeekId(cursor)
+  }
+
+  const range = getWeeksBetween(startWeekId, endWeekId)
+
+  const after = []
+  cursor = getNextWeekId(endWeekId)
+  for (let guard = 0; guard < 104 && after.length < padding; guard++) {
+    if (!skip.has(cursor)) after.push(cursor)
+    cursor = getNextWeekId(cursor)
+  }
+
+  return [...before, ...range, ...after]
 }
 
 export function isDateInWeek(date, weekId) {

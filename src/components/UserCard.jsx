@@ -32,7 +32,7 @@ export default function UserCard({ status, justification }) {
   const {
     userId, user, sessions, totalRequired, frozen, partiallyFrozen,
     frozenSessions, goalMet, progress, canEarnLife,
-    inRecoveryWindow, remainingDebt, debtConsumedThisWeek,
+    inRecoveryWindow, remainingDebt, recoveryWeeksLeft = 0, debtConsumedThisWeek,
     bankedExtras = 0, bankedExtrasProjected = 0,
   } = status
 
@@ -140,15 +140,20 @@ export default function UserCard({ status, justification }) {
       {/* Recovery debt counter — only when inside a recovery window with debt left */}
       {inRecoveryWindow && remainingDebt > 0 && (
         <div className="mb-2">
-          <div className="flex justify-between text-sm mb-1">
+          <div className="flex justify-between items-baseline text-sm mb-1">
             <span className="text-cyan-400">🔄 Recuperación pendiente</span>
             <span className="font-mono font-bold text-cyan-300">
               {remainingDebt} ses.
+              {recoveryWeeksLeft > 0 && (
+                <span className="ml-1 font-sans font-normal text-xs text-gray-400">
+                  · {recoveryWeeksLeft} sem. {recoveryWeeksLeft === 1 ? 'restante' : 'restantes'}
+                </span>
+              )}
             </span>
           </div>
           <p className="text-[11px] text-gray-500 leading-tight">
             {debtConsumedThisWeek > 0 && `Pagaste ${debtConsumedThisWeek} esta semana. `}
-            Cada sesión sobre la meta semanal dentro del rango ±3 baja la deuda.
+            Cada sesión sobre la meta semanal dentro del rango ±4 semanas activas baja la deuda.
           </p>
         </div>
       )}

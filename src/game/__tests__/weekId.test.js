@@ -132,6 +132,28 @@ describe('getRecoveryWindow', () => {
     expect(window).toContain('2026-W02')
     expect(window).not.toContain('2026-W01') // skipped id, must never appear
   })
+
+  it('defaults to ±4 active weeks', () => {
+    const window = getRecoveryWindow('2026-W10', '2026-W10')
+    expect(window).toEqual([
+      '2026-W06', '2026-W07', '2026-W08', '2026-W09',
+      '2026-W10',
+      '2026-W11', '2026-W12', '2026-W13', '2026-W14',
+    ])
+  })
+
+  it('skips frozen weeks and extends outward to keep padding active', () => {
+    // W08 and W12 are frozen by another absence — excluded and not counted,
+    // so the window reaches back to W05 and forward to W15.
+    const window = getRecoveryWindow('2026-W10', '2026-W10', 4, ['2026-W08', '2026-W12'])
+    expect(window).not.toContain('2026-W08')
+    expect(window).not.toContain('2026-W12')
+    expect(window).toEqual([
+      '2026-W05', '2026-W06', '2026-W07', '2026-W09',
+      '2026-W10',
+      '2026-W11', '2026-W13', '2026-W14', '2026-W15',
+    ])
+  })
 })
 
 describe('getAdjacentWeeks', () => {

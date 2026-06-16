@@ -228,7 +228,7 @@ export default function useGameLogic() {
     const weeksNeeded = new Set()
     for (const a of absences) {
       if (isLegacyAbsence(a) || a.status === 'closed') continue
-      for (const wk of getAbsenceRecoveryWindow(a)) {
+      for (const wk of getAbsenceRecoveryWindow(a, absences)) {
         if (wk !== currentWeekId) weeksNeeded.add(wk)
       }
     }
@@ -319,6 +319,22 @@ export default function useGameLogic() {
         .filter((a) => a.userId === userId && !isLegacyAbsence(a) && a.status !== 'closed')
         .reduce((sum, a) => sum + (liveRecovery.remainingDebtByAbsence[a.id] || 0), 0)
 
+      // Active recovery weeks still ahead (this week included) before the debt's
+      // window closes. The window already excludes frozen weeks, so this counts
+      // only the real chances left to pay down the debt with extras.
+      const recoveryWeeksLeft = (() => {
+        if (remainingDebt <= 0) return 0
+        const weeks = new Set()
+        for (const a of absences) {
+          if (a.userId !== userId || isLegacyAbsence(a) || a.status === 'closed') continue
+          if ((liveRecovery.remainingDebtByAbsence[a.id] || 0) <= 0) continue
+          for (const wk of getAbsenceRecoveryWindow(a, absences)) {
+            if (wk >= currentWeekId) weeks.add(wk)
+          }
+        }
+        return weeks.size
+      })()
+
       const goalMet = sessions >= totalRequired
       const bankedExtras = user.bankedExtras || 0
       // What the bank will look like after this week's close, assuming the
@@ -345,6 +361,7 @@ export default function useGameLogic() {
         inRecoveryWindow,
         debtConsumedThisWeek,
         remainingDebt,
+        recoveryWeeksLeft,
         bankedExtras,
         bankedExtrasProjected,
       }

@@ -8,9 +8,11 @@
 //   - Legacy: { frozenWeekId, frozenSessions, recoveryWeeks, missedSessionsPerRecoveryWeek }
 //     User picks recovery weeks manually. recoverySessions ADDS to weekly goal.
 //   - New:    { frozenWeeks: { [weekId]: count } }
-//     Recovery is automatic: extras above WEEKLY_GOAL in ±3 weeks around the
-//     freeze range pay down debt (FIFO). Extras consumed for debt don't count
-//     toward EXTRA_LIFE_THRESHOLD.
+//     Recovery is automatic: extras above WEEKLY_GOAL in the ±4 ACTIVE weeks
+//     around the freeze range pay down debt (FIFO). Weeks frozen by another
+//     absence don't count toward the ±4 — the window skips them and extends
+//     outward to reach 4 genuinely active weeks on each side. Extras consumed
+//     for debt don't count toward EXTRA_LIFE_THRESHOLD.
 //
 // Both formats are filtered/handled wherever absences are inspected.
 
@@ -37,10 +39,31 @@ export function getAbsenceRange(a) {
   return { startWeekId: keys[0], endWeekId: keys[keys.length - 1] }
 }
 
-export function getAbsenceRecoveryWindow(a) {
+// ±N active weeks of auto-recovery padding on each side of a freeze range.
+const RECOVERY_PADDING = 4
+
+/**
+ * Weeks frozen by the user's OTHER absences (any status/format) — the weeks an
+ * auto-recovery window must skip so a second freeze doesn't count toward the
+ * ±4 active-week padding.
+ */
+function otherFrozenWeeks(a, allAbsences) {
+  const skip = new Set()
+  if (!allAbsences) return skip
+  for (const other of allAbsences) {
+    if (other === a || (a.id != null && other.id === a.id)) continue
+    if (other.userId !== a.userId) continue
+    for (const wk of Object.keys(getFrozenWeeksMap(other))) skip.add(wk)
+  }
+  return skip
+}
+
+export function getAbsenceRecoveryWindow(a, allAbsences = null) {
   const range = getAbsenceRange(a)
   if (!range) return []
-  return getRecoveryWindow(range.startWeekId, range.endWeekId, 3)
+  return getRecoveryWindow(
+    range.startWeekId, range.endWeekId, RECOVERY_PADDING, otherFrozenWeeks(a, allAbsences)
+  )
 }
 
 /** createdAt can be a Firestore Timestamp, a plain {seconds} object, or absent. */
@@ -79,7 +102,7 @@ export function simulateAutoRecovery(absences, sessionsByUserWeek) {
     let remaining = totalDebt
     debtConsumedPerAbsenceWeek[a.id] = {}
 
-    const window = getAbsenceRecoveryWindow(a)
+    const window = getAbsenceRecoveryWindow(a, absences)
     for (const wk of window) {
       if (remaining <= 0) break
       if (frozenMap[wk] != null) continue // skip the absence's own frozen weeks
@@ -110,7 +133,7 @@ export function simulateAutoRecovery(absences, sessionsByUserWeek) {
  * - frozenSessions: sessions excused from this week (partial freeze allowed)
  * - totalRequired: WEEKLY_GOAL + recovery - frozen (clamped to 0)
  * - fullyFrozen: true when frozenSessions covers the entire (goal+recovery)
- * - inRecoveryWindow: true if any active new-format absence has this week in its ±3 window
+ * - inRecoveryWindow: true if any active new-format absence has this week in its ±4 window
  */
 export function computeWeekRequirements(userId, weekId, absences) {
   // Legacy recovery sessions add to the goal
@@ -126,7 +149,7 @@ export function computeWeekRequirements(userId, weekId, absences) {
   // Active new-format absence that has this week in its recovery window?
   const inRecoveryWindow = absences.some((a) =>
     a.userId === userId && !isLegacyAbsence(a) && a.status !== 'closed' &&
-    getAbsenceRecoveryWindow(a).includes(weekId)
+    getAbsenceRecoveryWindow(a, absences).includes(weekId)
   )
 
   const baseGoal = WEEKLY_GOAL + recoverySessions

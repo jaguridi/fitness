@@ -72,9 +72,23 @@ export default function AbsencePlanner({ absences = [], onChange }) {
   }, [weeksInRange, sessionsByWeek])
 
   const totalFrozen = Object.values(frozenWeeks).reduce((s, n) => s + n, 0)
+
+  // Weeks already frozen by the user's OTHER absences — skipped when counting
+  // the ±4 active recovery weeks (a second freeze doesn't use up a slot).
+  const otherFrozen = useMemo(() => {
+    const skip = new Set()
+    for (const a of absences) {
+      if (a.userId !== userId) continue
+      if (editingId && a.id === editingId) continue
+      const map = a.frozenWeeks || (a.frozenWeekId ? { [a.frozenWeekId]: 1 } : {})
+      for (const wk of Object.keys(map)) skip.add(wk)
+    }
+    return skip
+  }, [absences, userId, editingId])
+
   const recoveryWindow = useMemo(
-    () => (orderedStart && orderedEnd ? getRecoveryWindow(orderedStart, orderedEnd, 3) : []),
-    [orderedStart, orderedEnd]
+    () => (orderedStart && orderedEnd ? getRecoveryWindow(orderedStart, orderedEnd, 4, otherFrozen) : []),
+    [orderedStart, orderedEnd, otherFrozen]
   )
   const recoveryNonFrozen = recoveryWindow.filter((w) => !frozenWeeks[w])
 
@@ -261,7 +275,7 @@ export default function AbsencePlanner({ absences = [], onChange }) {
               {recoveryNonFrozen.length > 0 && (
                 <>
                   {' '}Tendrás {recoveryNonFrozen.length} semana(s) de recuperación automática
-                  alrededor del rango (±3) para hacer sesiones extra y pagar la deuda.
+                  alrededor del rango (±4 semanas activas) para hacer sesiones extra y pagar la deuda.
                 </>
               )}
             </p>
@@ -334,7 +348,7 @@ export default function AbsencePlanner({ absences = [], onChange }) {
                             : 'Cerrado · deuda completada'
                           : isLegacy
                           ? 'Recuperación manual (formato antiguo)'
-                          : 'Activo · recuperación automática ±3 semanas'}
+                          : 'Activo · recuperación automática ±4 semanas activas'}
                       </p>
                     </div>
                     <div className="flex gap-1 shrink-0">

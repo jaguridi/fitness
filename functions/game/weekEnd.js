@@ -221,7 +221,7 @@ export function computeWeekEndOutcome({
   // frozen weeks as 'missed'.
   for (const a of absences) {
     if (isLegacyAbsence(a) || a.status === 'closed') continue
-    const window = getAbsenceRecoveryWindow(a)
+    const window = getAbsenceRecoveryWindow(a, absences)
     if (window.length === 0 || window[window.length - 1] !== weekId) continue
 
     const remaining = remainingDebtByAbsence[a.id] || 0
@@ -299,7 +299,7 @@ export function getSimulationWeeks(weekId, absences) {
   const simWeeks = new Set([weekId])
   for (const a of absences) {
     if (isLegacyAbsence(a) || a.status === 'closed') continue
-    for (const w of getAbsenceRecoveryWindow(a)) {
+    for (const w of getAbsenceRecoveryWindow(a, absences)) {
       if (w <= weekId) simWeeks.add(w)
     }
   }

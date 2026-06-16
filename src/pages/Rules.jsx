@@ -76,11 +76,11 @@ const sections = [
   },
   {
     icon: '🔄',
-    title: 'Recuperación automática (±3 semanas)',
+    title: 'Recuperación automática (±4 semanas activas)',
     color: 'orange',
     items: [
       'Cuando congelas, generas una "deuda" igual al total de sesiones congeladas.',
-      'Tienes ±3 semanas alrededor del rango congelado para pagar la deuda con sesiones extra (por encima de la meta semanal).',
+      'Tienes ±4 semanas activas (no congeladas) alrededor del rango congelado para pagar la deuda con sesiones extra (por encima de la meta semanal). Si hay un segundo congelamiento, esas semanas no cuentan para las 4.',
       'Las sesiones extra dentro de la ventana se aplican automáticamente a la deuda; no necesitas elegir cuándo recuperarlas.',
       'Las sesiones que se usan para pagar deuda NO cuentan para la vida extra (umbral de 5 sesiones).',
       'La racha y el escudo siguen subiendo normal mientras cumplas la meta de cada semana.',
@@ -179,9 +179,9 @@ const CHANGELOG = [
     title: 'Congelamiento multi-semana + recuperación automática',
     items: [
       'Ahora puedes congelar un rango de días (no solo una semana) — incluida la semana en curso.',
-      'Recuperación automática: las sesiones extra (>3 por semana) en ±3 semanas alrededor del rango pagan la deuda solas.',
+      'Recuperación automática: las sesiones extra (>3 por semana) en ±4 semanas activas alrededor del rango pagan la deuda solas (un segundo congelamiento no cuenta para esas 4).',
       'Editar y eliminar tus congelamientos activos desde Admin.',
-      'Contador "Recuperación pendiente" en tu tarjeta cuando estás dentro del rango con deuda.',
+      'Contador "Recuperación pendiente" en tu tarjeta cuando estás dentro del rango con deuda, con las semanas activas que te quedan para lograrlo.',
       'Pestaña de Reglas ahora incluye este Historial de cambios.',
     ],
   },
