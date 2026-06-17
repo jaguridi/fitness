@@ -5,6 +5,13 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { resolve } from 'path'
 import { tmpdir } from 'os'
 
+// Base path differs per host:
+//   '/'         → Vercel custom domain (fitness.jaguridi.cl), served at root.
+//   '/fitness/' → GitHub Pages (jaguridi.github.io/fitness/).
+// `npm run deploy` passes --base=/fitness/ for the GH Pages build; the default
+// build (used by Vercel) stays at root.
+const BASE = process.argv.find((a) => a.startsWith('--base='))?.split('=')[1] || '/'
+
 export default defineConfig({
   plugins: [
     react(),
@@ -19,7 +26,7 @@ export default defineConfig({
         // The FCM service worker has its own registration — never precache or
         // intercept it.
         globIgnores: ['firebase-messaging-sw.js'],
-        navigateFallback: '/fitness/index.html',
+        navigateFallback: `${BASE}index.html`,
         navigateFallbackDenylist: [/firebase-messaging-sw\.js$/],
         runtimeCaching: [
           {
@@ -36,6 +43,6 @@ export default defineConfig({
       },
     }),
   ],
-  base: '/fitness/',
+  base: BASE,
   cacheDir: resolve(tmpdir(), '.vite-fitness'),
 })
