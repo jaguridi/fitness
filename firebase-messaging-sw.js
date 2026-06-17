@@ -21,8 +21,10 @@ messaging.onBackgroundMessage((payload) => {
   const body = payload.notification?.body || ''
   self.registration.showNotification(title, {
     body,
-    icon: '/fitness/avatars/jose.png',
-    badge: '/fitness/avatars/jose.png',
+    // Relative to this SW's location so it works at both hosts (root on Vercel,
+    // /fitness/ on GitHub Pages).
+    icon: './avatars/jose.png',
+    badge: './avatars/jose.png',
     tag: 'fitfamily-reminder',
   })
 })
