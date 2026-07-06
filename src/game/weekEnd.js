@@ -60,7 +60,15 @@ export function computeWeekEndOutcome({
   // Per-user state updates buffered, so absence settlement below can read the
   // freshest values without a refetch.
   const userStateById = {}
-  for (const u of users) userStateById[u.id] = { ...u }
+  // Fine level each user carried INTO this close, captured before the weekly
+  // loop mutates it. Absence settlement caps its proportional fine at this so a
+  // same-week weekly miss (which doubles currentFineLevel) can't also inflate
+  // the settlement of a long-past absence.
+  const startFineLevelById = {}
+  for (const u of users) {
+    userStateById[u.id] = { ...u }
+    startFineLevelById[u.id] = u.currentFineLevel || BASE_FINE
+  }
 
   for (const uid of userIds) {
     const user = userStateById[uid]
@@ -228,7 +236,13 @@ export function computeWeekEndOutcome({
     if (remaining > 0) {
       const user = userStateById[a.userId]
       if (user) {
-        const fineLevel = user.currentFineLevel || BASE_FINE
+        // Never charge above the level carried into the close: a same-week miss
+        // can't inflate this old-absence settlement, but a same-week completion
+        // (which lowered currentFineLevel) still gives the cheaper level.
+        const fineLevel = Math.min(
+          user.currentFineLevel || BASE_FINE,
+          startFineLevelById[a.userId] ?? (user.currentFineLevel || BASE_FINE)
+        )
         const fine = Math.min(MAX_FINE, Math.round((fineLevel * remaining) / WEEKLY_GOAL))
         const settledState = {
           walletBalance: (user.walletBalance || 0) + fine,

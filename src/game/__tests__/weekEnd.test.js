@@ -326,6 +326,35 @@ describe('absence settlement', () => {
     expect(settlementUpdate.data.consecutiveSuccesses).toBe(0)
   })
 
+  it('a same-week weekly miss does not inflate the old-absence settlement', () => {
+    // Same freeze (W18–W19, window ends on WEEK) but the user MISSES WEEK and
+    // pays no extras, so all 6 sessions of debt remain. The weekly miss doubles
+    // the fine level 5000→10000; the settlement must still price at the pre-miss
+    // level (round(5000*6/3)=10000), not the doubled 10000 (which gave 20000).
+    const outcome = computeWeekEndOutcome({
+      weekId: WEEK,
+      userIds: USER_IDS,
+      users: [freshUser('user1', { currentFineLevel: 5000 })],
+      absences: [{ id: 'a1', userId: 'user1', frozenWeeks: FROZEN }],
+      weekWorkouts: [], // missed the week
+      weekJustifications: [],
+      sessionsByUserWeek: { user1: { [WEEK]: 0 } },
+      nowIso: '2026-06-08T00:00:00.000Z',
+    })
+
+    const weekly = outcome.summaries.find((s) => s.weekId === WEEK && s.userId === 'user1')
+    expect(weekly.data.status).toBe('missed')
+    expect(weekly.data.fineApplied).toBe(5000)
+
+    const settle = outcome.absenceUpdates.find((u) => u.absenceId === 'a1')
+    expect(settle.data.debtUnpaid).toBe(6)
+    expect(settle.data.fineApplied).toBe(Math.round((5000 * 6) / WEEKLY_GOAL)) // 10000, not 20000
+
+    // Fine level doubled once (from the weekly miss), not twice.
+    const finalState = outcome.userUpdates.filter((u) => u.userId === 'user1').at(-1).data
+    expect(finalState.currentFineLevel).toBe(10000)
+  })
+
   it('does not settle before the window ends', () => {
     const absence = { id: 'a1', userId: 'user1', frozenWeeks: { '2026-W21': 3 } } // window ends W25 (±4)
     const outcome = computeWeekEndOutcome({
