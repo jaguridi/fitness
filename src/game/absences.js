@@ -69,9 +69,15 @@ function createdAtMillis(a) {
 }
 
 /**
- * Greedy FIFO simulation: for each user, walks every active new-format absence
- * in createdAt order, and consumes extras (sessions above WEEKLY_GOAL) from
+ * Greedy FIFO simulation: for each user, walks every new-format absence in
+ * createdAt order, and consumes extras (sessions above WEEKLY_GOAL) from
  * non-frozen weeks in the recovery window to pay down debt.
+ *
+ * CLOSED absences are included so the extras they already consumed stay
+ * reserved — otherwise a still-active absence would reuse the same sessions and
+ * a real recovery debt would silently vanish. Callers act only on active
+ * absences' remaining debt (they filter by status); closed ones just hold their
+ * claim on past extras.
  *
  * Returns:
  *   {
@@ -86,7 +92,7 @@ export function simulateAutoRecovery(absences, sessionsByUserWeek) {
   const remainingDebtByAbsence = {}
 
   const newAbsences = absences
-    .filter((a) => !isLegacyAbsence(a) && a.status !== 'closed' && a.frozenWeeks)
+    .filter((a) => !isLegacyAbsence(a) && a.frozenWeeks)
     .slice()
     .sort((a, b) => createdAtMillis(a) - createdAtMillis(b))
 

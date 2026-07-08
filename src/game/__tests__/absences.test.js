@@ -146,11 +146,22 @@ describe('simulateAutoRecovery', () => {
     expect(r.debtConsumedByUserWeek[U]['2026-W12']).toBe(2)
   })
 
-  it('ignores legacy and closed absences', () => {
+  it('ignores legacy absences', () => {
     const legacy = { id: 'L', userId: U, frozenWeekId: '2026-W10' }
-    const closed = { id: 'C', userId: U, frozenWeeks: { '2026-W10': 3 }, status: 'closed' }
-    const r = simulateAutoRecovery([legacy, closed], { [U]: { '2026-W12': 9 } })
+    const r = simulateAutoRecovery([legacy], { [U]: { '2026-W12': 9 } })
     expect(r.remainingDebtByAbsence).toEqual({})
+  })
+
+  it('lets a closed absence reserve the extras it consumed (no reuse)', () => {
+    // A settled freeze that already used W12's extras, plus a still-active freeze
+    // whose window also covers W12. The active one must NOT reuse those sessions,
+    // otherwise a real recovery debt would silently disappear.
+    const closed = { id: 'C', userId: U, frozenWeeks: { '2026-W10': 3 }, status: 'closed', createdAt: { seconds: 100 } }
+    const active = { id: 'A', userId: U, frozenWeeks: { '2026-W11': 3 }, status: 'active', createdAt: { seconds: 200 } }
+    const r = simulateAutoRecovery([closed, active], { [U]: { '2026-W12': 6 } }) // 3 extras
+    // Older closed absence (FIFO) claims all 3 extras; active one is left owing its full 3.
+    expect(r.debtConsumedPerAbsenceWeek.C).toEqual({ '2026-W12': 3 })
+    expect(r.remainingDebtByAbsence.A).toBe(3)
   })
 })
 
