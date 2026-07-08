@@ -34,7 +34,11 @@ import {
   computeSessionsJustified,
 } from './game/absences.js'
 import { computeWeekEndOutcome, getSimulationWeeks } from './game/weekEnd.js'
-import { USER_IDS } from './game/constants.js'
+import { USER_IDS, USER_GENDER } from './game/constants.js'
+
+// Spanish gendered word by user: pick(userId, femaleForm, maleForm).
+const gword = (userId, female, male) => (USER_GENDER[userId] === 'f' ? female : male)
+const genderLabel = (userId) => (USER_GENDER[userId] === 'f' ? 'mujer' : 'hombre')
 
 const anthropicApiKey = defineSecret('ANTHROPIC_API_KEY')
 
@@ -167,7 +171,7 @@ export const mondayKickoff = onSchedule(
           await sendPushToUser(
             u,
             '🧊 Semana congelada',
-            `Hola ${u.name}! Esta semana está congelada para ti — descansa tranquilo.`
+            `Hola ${u.name}! Esta semana está congelada para ti — descansa ${gword(u.id, 'tranquila', 'tranquilo')}.`
           )
           return
         }
@@ -559,6 +563,7 @@ export const generateWeeklyRecap = onCall(
       const data = d.data()
       return {
         name: usersMap[data.userId] || data.userId,
+        gender: genderLabel(data.userId),
         sessions: data.sessions || 0,
         totalRequired: data.totalRequired || 3,
         status: data.status,
@@ -571,7 +576,7 @@ export const generateWeeklyRecap = onCall(
     })
 
     const summaryText = summaries.map((s) => {
-      const parts = [`${s.name}: ${s.sessions}/${s.totalRequired} sesiones, estado=${s.status}`]
+      const parts = [`${s.name} (${s.gender}): ${s.sessions}/${s.totalRequired} sesiones, estado=${s.status}`]
       if (s.fineApplied > 0) parts.push(`multa=$${s.fineApplied}`)
       if (s.lifeUsed) parts.push('usó vida')
       if (s.lifeEarned) parts.push('ganó vida extra')
@@ -589,7 +594,9 @@ export const generateWeeklyRecap = onCall(
 Genera un resumen semanal breve y entretenido (máximo 4-5 frases) en español chileno informal.
 Usa humor, sarcasmo cariñoso y referencias deportivas. Celebra a los que cumplieron y molesta (con cariño) a los que no.
 Incluye 2-3 emojis. NO uses formato markdown. Solo texto plano con saltos de línea.
-Si alguien ganó un escudo o vida extra, celébralo. Si alguien pagó multa, menciónalo con humor.`,
+Si alguien ganó un escudo o vida extra, celébralo. Si alguien pagó multa, menciónalo con humor.
+El género de cada persona va entre paréntesis (hombre/mujer): respétalo SIEMPRE al conjugar
+adjetivos y artículos (ej.: para una mujer usa "cansada", "la campeona", no "cansado").`,
         messages: [{
           role: 'user',
           content: `Resumen de la semana ${weekId}:\n${summaryText}`,
@@ -675,6 +682,7 @@ export const generateMonthlyRecap = onCall(
       if (!perUser[s.userId]) {
         perUser[s.userId] = {
           name: usersMap[s.userId] || s.userId,
+          gender: genderLabel(s.userId),
           sessions: 0,
           weeksCompleted: 0,
           weeksMissed: 0,
@@ -702,7 +710,7 @@ export const generateMonthlyRecap = onCall(
 
     const summaryText = Object.values(perUser).map((u) => {
       const parts = [
-        `${u.name}: ${u.sessions} sesiones, ${u.minutes} min`,
+        `${u.name} (${u.gender}): ${u.sessions} sesiones, ${u.minutes} min`,
         `${u.weeksCompleted}/${u.weeksCompleted + u.weeksMissed + u.weeksJustified} semanas cumplidas`,
       ]
       if (u.weeksMissed > 0) parts.push(`${u.weeksMissed} fallidas`)
@@ -731,6 +739,8 @@ Estructura sugerida:
 4. Algún dato curioso (sesiones totales, kcal, tendencia vs mes anterior si está clara)
 5. Una proyección o consejo para el mes siguiente
 
+El género de cada persona va entre paréntesis (hombre/mujer): respétalo SIEMPRE al conjugar
+adjetivos y artículos (ej.: para una mujer usa "cansada", "la campeona", no "cansado").
 No uses markdown. Solo texto plano con saltos de línea. Máximo 3 emojis en total.`,
         messages: [{
           role: 'user',

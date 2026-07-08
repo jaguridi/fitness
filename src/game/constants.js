@@ -5,6 +5,11 @@
 // Processing order for the week-end close (matches USERS in src/constants.js).
 export const USER_IDS = ['user1', 'user2', 'user3', 'user4']
 
+// Grammatical gender per family member, for gendered Spanish copy and to stop
+// AI-generated recaps from guessing wrong (e.g. "Javi" defaulting to male).
+// Jose & Gonza are men; Javi & Fran are women.
+export const USER_GENDER = { user1: 'm', user2: 'f', user3: 'm', user4: 'f' }
+
 export const WEEKLY_GOAL = 3
 export const BASE_FINE = 5000
 export const MAX_FINE = 40000
