@@ -93,11 +93,18 @@ export default function WeeklyHistory() {
                   </p>
                   <p className="text-xs text-gray-400">
                     {s.sessions} sesiones
+                    {s.frozenSessions > 0 && ` | ❄️ ${s.frozenSessions} congelada${s.frozenSessions > 1 ? 's' : ''}`}
+                    {s.debtUnpaid > 0 && ` | 🔄 recuperación no pagada: ${s.debtUnpaid}`}
                     {s.lifeUsed && ' | ❤️ Vida usada'}
                     {s.lifeEarned && ' | 🌟 Vida ganada'}
                     {s.shieldEarned && ' | 🛡️ Escudo ganado'}
                     {s.shieldBroken && ' | 💔 Escudo roto'}
                   </p>
+                  {s.status === 'missed' && s.frozenSessions > 0 && (
+                    <p className="text-[11px] text-cyan-400/80 mt-0.5">
+                      Era semana congelada — la multa es por deuda de recuperación no cubierta.
+                    </p>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className={`text-sm font-bold ${st.color}`}>{st.text}</p>
