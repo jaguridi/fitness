@@ -105,10 +105,14 @@ export function getWeeksBetween(startWeekId, endWeekId) {
  * they neither count toward the padding nor appear in the window — so the
  * window walks outward until it gathers `padding` genuinely active weeks on
  * each side. With no `frozenWeeks`, the result is a contiguous span.
+ *
+ * `paddingAfter` overrides the trailing side only (defaults to `padding`), so a
+ * deadline can be extended without also reaching further back for old extras.
  */
-export function getRecoveryWindow(startWeekId, endWeekId, padding = 4, frozenWeeks = null) {
+export function getRecoveryWindow(startWeekId, endWeekId, padding = 4, frozenWeeks = null, paddingAfter = null) {
   if (!startWeekId || !endWeekId) return []
   const skip = frozenWeeks instanceof Set ? frozenWeeks : new Set(frozenWeeks || [])
+  const trailing = typeof paddingAfter === 'number' && paddingAfter >= 0 ? paddingAfter : padding
 
   const before = []
   let cursor = getPreviousWeekId(startWeekId)
@@ -121,7 +125,7 @@ export function getRecoveryWindow(startWeekId, endWeekId, padding = 4, frozenWee
 
   const after = []
   cursor = getNextWeekId(endWeekId)
-  for (let guard = 0; guard < 104 && after.length < padding; guard++) {
+  for (let guard = 0; guard < 104 && after.length < trailing; guard++) {
     if (!skip.has(cursor)) after.push(cursor)
     cursor = getNextWeekId(cursor)
   }

@@ -50,6 +50,35 @@ describe('absence schema helpers', () => {
       '2026-W11', '2026-W13', '2026-W14', '2026-W15',
     ])
   })
+
+  it('grants extraRecoveryWeeks at the END of the window only', () => {
+    const base = { userId: U, frozenWeeks: { '2026-W10': 3 } }
+    const extended = { ...base, extraRecoveryWeeks: 2 }
+    const w0 = getAbsenceRecoveryWindow(base)
+    const w2 = getAbsenceRecoveryWindow(extended)
+    expect(w0[w0.length - 1]).toBe('2026-W14')
+    expect(w2[w2.length - 1]).toBe('2026-W16')
+    // Start is untouched: the extension is more time, not a wider reach back.
+    expect(w2[0]).toBe(w0[0])
+    expect(w2).toHaveLength(w0.length + 2)
+  })
+
+  it('ignores absent, zero or negative extraRecoveryWeeks', () => {
+    const base = { userId: U, frozenWeeks: { '2026-W10': 3 } }
+    const end = getAbsenceRecoveryWindow(base).at(-1)
+    for (const v of [undefined, 0, -3, null, '2']) {
+      expect(getAbsenceRecoveryWindow({ ...base, extraRecoveryWeeks: v }).at(-1)).toBe(end)
+    }
+  })
+
+  it('lets the extension push a debt past a window that would settle now', () => {
+    // W10 freeze, W15 is the last window week → settles at W15's close.
+    const a = { id: 'a1', userId: U, frozenWeeks: { '2026-W10': 3 }, extraRecoveryWeeks: 2 }
+    const other = { id: 'a2', userId: U, frozenWeeks: { '2026-W12': 3 } }
+    const window = getAbsenceRecoveryWindow(a, [a, other])
+    expect(window[window.length - 1]).toBe('2026-W17')
+    expect(window).not.toContain('2026-W12')
+  })
 })
 
 describe('computeWeekRequirements', () => {

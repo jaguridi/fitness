@@ -154,6 +154,24 @@ describe('getRecoveryWindow', () => {
       '2026-W11', '2026-W13', '2026-W14', '2026-W15',
     ])
   })
+
+  it('extends only the trailing side when paddingAfter is given', () => {
+    const window = getRecoveryWindow('2026-W10', '2026-W10', 4, null, 6)
+    // Leading side untouched — no reaching further back for old extras.
+    expect(window.slice(0, 5)).toEqual([
+      '2026-W06', '2026-W07', '2026-W08', '2026-W09', '2026-W10',
+    ])
+    expect(window.slice(5)).toEqual([
+      '2026-W11', '2026-W12', '2026-W13', '2026-W14', '2026-W15', '2026-W16',
+    ])
+  })
+
+  it('counts the trailing extension in ACTIVE weeks, skipping frozen ones', () => {
+    const window = getRecoveryWindow('2026-W10', '2026-W10', 4, ['2026-W12', '2026-W13'], 6)
+    expect(window).not.toContain('2026-W12')
+    expect(window).not.toContain('2026-W13')
+    expect(window[window.length - 1]).toBe('2026-W18')
+  })
 })
 
 describe('getAdjacentWeeks', () => {

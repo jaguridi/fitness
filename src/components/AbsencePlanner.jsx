@@ -348,8 +348,18 @@ export default function AbsencePlanner({ absences = [], onChange }) {
                             : 'Cerrado · deuda completada'
                           : isLegacy
                           ? 'Recuperación manual (formato antiguo)'
-                          : 'Activo · recuperación automática ±4 semanas activas'}
+                          : `Activo · recuperación automática ±4 semanas activas${
+                              a.extraRecoveryWeeks > 0
+                                ? ` + ${a.extraRecoveryWeeks} de prórroga`
+                                : ''
+                            }`}
                       </p>
+                      {!closed && a.extraRecoveryWeeks > 0 && (
+                        <p className="text-xs text-cyan-400/80 mt-0.5">
+                          🎁 Prórroga extraordinaria: {a.extraRecoveryWeeks} semanas activas extra
+                          para pagar la deuda.
+                        </p>
+                      )}
                     </div>
                     <div className="flex gap-1 shrink-0">
                       {!closed && !isLegacy && (

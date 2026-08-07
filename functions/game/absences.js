@@ -13,6 +13,8 @@
 //     absence don't count toward the ±4 — the window skips them and extends
 //     outward to reach 4 genuinely active weeks on each side. Extras consumed
 //     for debt don't count toward EXTRA_LIFE_THRESHOLD.
+//     An optional `extraRecoveryWeeks: N` grants that absence N more ACTIVE
+//     weeks at the END of its window — a one-off deadline extension.
 //
 // Both formats are filtered/handled wherever absences are inspected.
 
@@ -43,6 +45,19 @@ export function getAbsenceRange(a) {
 const RECOVERY_PADDING = 4
 
 /**
+ * One-off deadline extension stored on the absence doc: N extra ACTIVE weeks
+ * added to the TRAILING padding only, so the absence gets more time to pay
+ * without also reaching further back to claim older extras.
+ *
+ * Lives on the data, not in RECOVERY_PADDING, so the standing ±4 rule keeps
+ * applying to every other (and every future) absence.
+ */
+function extraRecoveryWeeks(a) {
+  const n = a.extraRecoveryWeeks
+  return typeof n === 'number' && n > 0 ? Math.floor(n) : 0
+}
+
+/**
  * Weeks frozen by the user's OTHER absences (any status/format) — the weeks an
  * auto-recovery window must skip so a second freeze doesn't count toward the
  * ±4 active-week padding.
@@ -62,7 +77,8 @@ export function getAbsenceRecoveryWindow(a, allAbsences = null) {
   const range = getAbsenceRange(a)
   if (!range) return []
   return getRecoveryWindow(
-    range.startWeekId, range.endWeekId, RECOVERY_PADDING, otherFrozenWeeks(a, allAbsences)
+    range.startWeekId, range.endWeekId, RECOVERY_PADDING, otherFrozenWeeks(a, allAbsences),
+    RECOVERY_PADDING + extraRecoveryWeeks(a)
   )
 }
 
