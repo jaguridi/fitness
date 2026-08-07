@@ -279,7 +279,11 @@ export default function Dashboard({ gameState }) {
         if (existingJustification.aiVerdict === true) {
           return (
             <div className="bg-green-900/10 border border-green-700/20 rounded-2xl p-3 text-center">
-              <p className="text-green-400 text-sm">✅ Justificación aceptada — multa congelada esta semana</p>
+              <p className="text-green-400 text-sm">✅ Justificación aceptada — sin multa esta semana</p>
+              <p className="text-green-400/60 text-xs mt-1">
+                No es lo mismo que congelar: no genera deuda de recuperación. La semana no cuenta como
+                cumplida, así que la racha se reinicia.
+              </p>
             </div>
           )
         }

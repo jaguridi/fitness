@@ -19,15 +19,24 @@ const evaluateJustificationFn = httpsCallable(functions, 'evaluateJustification'
 /**
  * Evaluate an excuse using the Cloud Function (Claude Haiku).
  *
+ * `context` lets the judge see the week as the game sees it — above all whether
+ * a PARTIAL freeze is already in place, so a trip that was frozen through
+ * Tuesday isn't rejected as "you should have frozen the whole week". The
+ * function re-reads the real numbers from Firestore; only the ids travel.
+ *
  * @param {string} excuse - The user's excuse text
  * @param {string|null} photoBase64 - Optional photo evidence as base64 data URL
+ * @param {{userId?: string, weekId?: string, sessionsJustified?: number}} [context]
  * @returns {Promise<{valid: boolean, reason: string, aiError?: boolean}>}
  */
-export async function evaluateExcuse(excuse, photoBase64 = null) {
+export async function evaluateExcuse(excuse, photoBase64 = null, context = {}) {
   try {
     const { data } = await evaluateJustificationFn({
       excuse: excuse.trim(),
       photoBase64: photoBase64 && photoBase64.startsWith('data:') ? photoBase64 : null,
+      userId: context.userId || null,
+      weekId: context.weekId || null,
+      sessionsJustified: context.sessionsJustified ?? null,
     })
 
     return {

@@ -74,8 +74,13 @@ export default function JustificationModal({ weekId, existing = null, onClose, o
 
     setSubmitting(true)
     try {
-      // 1. Evaluate with AI (send photo as base64 if available)
-      const aiResult = await evaluateExcuse(excuse.trim(), photoPreview)
+      // 1. Evaluate with AI (photo as base64 + week context so the judge can see
+      //    partial freezes, sessions already required and sessions logged)
+      const aiResult = await evaluateExcuse(excuse.trim(), photoPreview, {
+        userId: currentUser.id,
+        weekId,
+        sessionsJustified,
+      })
       setVerdict(aiResult)
 
       // 2. Upload evidence photo to Storage (if new photo provided)
@@ -157,7 +162,7 @@ export default function JustificationModal({ weekId, existing = null, onClose, o
             <p className="text-amber-400 text-xs">
               {isAppeal
                 ? 'Corrige tu justificación, agrega más detalles o mejor evidencia. La IA volverá a evaluar.'
-                : 'Enfermedad súbita, lesión, emergencia. Si era previsible (viaje, vacaciones), usa la semana congelada. Adjunta evidencia (certificado médico, foto) para mayor probabilidad de aprobación.'}
+                : 'Enfermedad súbita, lesión, emergencia. Si era previsible (viaje, vacaciones), usa la semana congelada — el Juez ve tus congelamientos, incluso parciales. La evidencia suma, pero no es obligatoria: si es algo por lo que nadie va al médico, basta con contar bien qué pasó y desde cuándo.'}
             </p>
           </div>
 
@@ -208,7 +213,7 @@ export default function JustificationModal({ weekId, existing = null, onClose, o
                 <textarea
                   value={excuse}
                   onChange={(e) => setExcuse(e.target.value)}
-                  placeholder="Ejemplo: Me dio gripe fuerte desde el martes, con fiebre de 39°. Adjunto certificado médico."
+                  placeholder="Ejemplo: El miércoles me contagié el virus estomacal de mi hijo. Estuve con vómitos y diarrea hasta el sábado; llamé al doctor y me dijo que no fuera."
                   rows={3}
                   className="w-full bg-gray-700 border border-gray-600 rounded-xl px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none"
                 />
@@ -299,7 +304,8 @@ export default function JustificationModal({ weekId, existing = null, onClose, o
                 )}
                 {!verdict.aiError && verdict.valid && (
                   <p className="text-green-400/70 text-xs mt-2">
-                    La multa se congela esta semana (no se cobra, pero no cuenta como semana exitosa).
+                    Esta semana no se cobra multa. Ojo: justificar NO es congelar — no genera deuda de
+                    recuperación, pero la semana tampoco cuenta como cumplida (la racha se reinicia).
                   </p>
                 )}
                 {!verdict.aiError && !verdict.valid && (

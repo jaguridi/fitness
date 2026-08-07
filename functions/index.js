@@ -28,10 +28,12 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { getMessaging } from 'firebase-admin/messaging'
 import Anthropic from '@anthropic-ai/sdk'
 
-import { getWeekId, getPreviousWeekId } from './game/weekId.js'
+import { getWeekId, getPreviousWeekId, getWeekRange } from './game/weekId.js'
 import {
   computeWeekRequirements,
   computeSessionsJustified,
+  getFrozenWeeksMap,
+  getAbsenceRange,
 } from './game/absences.js'
 import { computeWeekEndOutcome, getSimulationWeeks } from './game/weekEnd.js'
 import { USER_IDS, USER_GENDER } from './game/constants.js'
@@ -772,47 +774,165 @@ No uses markdown. Solo texto plano con saltos de línea. Máximo 3 emojis en tot
 
 // ── 8. AI Judge — Evaluate justifications with Claude ─────────
 
-const AI_JUDGE_PROMPT = `Eres el juez estricto pero justo del reto fitness familiar "FitFamily".
+const AI_JUDGE_PROMPT = `Eres el juez del reto fitness familiar "FitFamily": estricto con las excusas fáciles,
+justo con lo que de verdad estuvo fuera del control de la persona.
 
-CONTEXTO:
-- 4 miembros de una familia deben completar 3 sesiones de ejercicio por semana
-- Si no cumplen, pagan una multa en pesos chilenos
-- Existe un sistema de "semana congelada" para ausencias PREVISIBLES (viajes, vacaciones, etc.)
-- Las justificaciones son SOLO para IMPREVISTOS (cosas que no se pudieron planificar)
+CÓMO FUNCIONA EL JUEGO:
+- 4 miembros de una familia deben completar 3 sesiones de ejercicio por semana.
+- Si no cumplen, pagan una multa en pesos chilenos.
+- Para ausencias PREVISIBLES (viajes, vacaciones) existe el CONGELAMIENTO, que se pide con
+  anticipación y descuenta sesiones de la meta.
+- El congelamiento es POR SESIÓN y puede ser PARCIAL. Congelar 1 o 2 sesiones de una semana es el
+  uso CORRECTO del sistema: quien viaja hasta el martes congela solo la parte del viaje y queda
+  obligado a las sesiones restantes. NO existe la obligación de congelar la semana completa.
+- Las justificaciones (lo que tú evalúas) son SOLO para IMPREVISTOS: lo que no se pudo planificar.
 
-CRITERIOS PARA ACEPTAR:
-- Enfermedad súbita (gripe, COVID, infección) — idealmente con certificado médico o foto
-- Lesión que impida ejercicio — con evidencia (foto, certificado)
-- Emergencia familiar grave (hospitalización de familiar, accidente)
-- Catástrofe natural o situación de fuerza mayor
+EL CONTEXTO DE LA SEMANA que viene en el mensaje son datos reales del sistema, no afirmaciones del
+usuario: cuántas sesiones estaban congeladas, cuántas quedaron exigibles, cuántas se registraron y
+cuántas se piden justificar. Úsalo siempre; pesa más que cualquier suposición tuya.
 
-CRITERIOS PARA RECHAZAR:
-- "No tuve tiempo" / "Estuve ocupado" — siempre hay 30 min para ejercicio
-- Flojera, cansancio, falta de motivación — eso es precisamente lo que el reto combate
-- Viaje planificado — eso se congela con anticipación
-- Clima — se puede ejercitar adentro
-- Excusas vagas sin evidencia concreta
-- Trabajo excesivo — se puede hacer ejercicio corto
-- Cualquier situación que ERA previsible y se pudo planificar como semana congelada
+CÓMO EVALUAR:
+1. Juzga SOLO las sesiones que se piden justificar, contra las que quedaron EXIGIBLES después del
+   congelamiento. La parte previsible ya quedó resuelta por el congelamiento.
+2. NUNCA rechaces con el argumento de que "debió congelar la semana completa" o "el viaje era
+   previsible" cuando el contexto muestra sesiones congeladas: ese congelamiento parcial ya es
+   correcto y el usuario está justificando justamente el resto.
+3. Una justificación puede mezclar una parte previsible (ya congelada) y un imprevisto posterior
+   (por ejemplo: viaje hasta el martes y después una enfermedad). Evalúa solo el imprevisto.
+4. Verifica que el imprevisto cubra los días que quedaban disponibles. Si el imprevisto duró un día
+   y quedaban cinco días hábiles sin sesiones registradas, rechaza o acepta menos.
+5. Si el relato es específico y consistente con el contexto, acéptalo. Si es vago, genérico o
+   contradice el contexto, recházalo.
 
-SÉ ESTRICTO. El objetivo del reto es que NO haya excusas fáciles. Solo situaciones genuinamente fuera del control de la persona.
+ACEPTA:
+- Enfermedad súbita: gripe, COVID, infección, virus estomacal/gastroenteritis — propia o contagiada
+  en la casa.
+- Lesión que impida ejercitarse.
+- Emergencia familiar: hospitalización, accidente, hijo enfermo que requiere cuidado.
+- Catástrofe natural o fuerza mayor.
 
-Si el usuario menciona evidencia (certificado, foto) pero no la adjunta, pídela.
-Si adjunta una imagen, evalúala como evidencia.
+RECHAZA:
+- "No tuve tiempo" / "estuve ocupado" / trabajo excesivo — 30 minutos siempre hay.
+- Flojera, cansancio, falta de motivación — eso es precisamente lo que el reto combate.
+- Clima — se puede entrenar adentro.
+- Relatos vagos, sin fechas ni detalles ("me sentí mal toda la semana").
+- Un viaje o compromiso previsible que NO fue congelado (el contexto muestra 0 sesiones congeladas)
+  y que recién ahora se quiere justificar.
+
+EVIDENCIA (aquí se falla seguido — lee con cuidado):
+- La evidencia suma, pero NO es obligatoria. La falta de certificado médico NO es, por sí sola,
+  motivo de rechazo.
+- Hay enfermedades reales por las que nadie va al médico: virus estomacal, gastroenteritis,
+  resfrío, contagio de un hijo, intoxicación, migraña. Si el relato es específico y coherente
+  (cuándo partió, síntomas, de quién se contagió), acéptalo aunque no haya certificado.
+  "Llamé al doctor y me dijo que no fuera" es una explicación válida, no una contradicción.
+- Pide evidencia solo cuando el relato implica que la documentación existe naturalmente:
+  hospitalización, fractura, licencia médica, atención de urgencia.
+- Si adjunta una imagen, evalúala como evidencia.
+
+El género de la persona va indicado en el contexto: respétalo al conjugar (para una mujer,
+"estuviste enferma", no "enfermo").
 
 Responde SOLO con un JSON válido (sin markdown, sin backticks):
 {"valid": true/false, "reason": "explicación breve en español de máximo 2 frases"}`
 
+const WEEKDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+
+/** "domingo 26-07" — short, human, unambiguous for the judge. */
+function shortDate(date) {
+  let d = date
+  if (typeof date === 'string') {
+    const [y, m, day] = date.slice(0, 10).split('-').map(Number)
+    d = new Date(y, m - 1, day)
+  }
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) return String(date)
+  const dd = String(d.getDate()).padStart(2, '0')
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  return `${WEEKDAYS[d.getDay()]} ${dd}-${mm}`
+}
+
+/**
+ * Week facts the judge needs to tell a legitimate PARTIAL freeze apart from
+ * someone who never froze anything. Read server-side from Firestore, so the
+ * client can't inflate it.
+ *
+ * Returns null when the caller didn't send userId/weekId (older clients) —
+ * the judge then falls back to reading the text alone.
+ */
+async function buildWeekContext(userId, weekId, sessionsJustified) {
+  if (!userId || !weekId) return null
+
+  const [userSnap, absences, workoutSnap] = await Promise.all([
+    db.collection('users').doc(userId).get(),
+    getAllAbsences(),
+    db.collection('workouts').where('userId', '==', userId).where('weekId', '==', weekId).get(),
+  ])
+
+  const name = userSnap.exists ? userSnap.data().name || userId : userId
+  const { recoverySessions, frozenSessions, totalRequired } =
+    computeWeekRequirements(userId, weekId, absences)
+
+  const { start, end } = getWeekRange(weekId)
+  const workoutDates = workoutSnap.docs
+    .map((d) => d.data().date)
+    .filter(Boolean)
+    .sort()
+
+  const lines = [
+    `- Persona: ${name} (${genderLabel(userId)})`,
+    `- Semana evaluada: ${weekId} (${shortDate(start)} a ${shortDate(end)}). Hoy es ${shortDate(new Date())}.`,
+    `- Meta base: 3 sesiones${recoverySessions > 0 ? ` + ${recoverySessions} de recuperación` : ''}`,
+  ]
+
+  if (frozenSessions > 0) {
+    const covering = absences
+      .filter((a) => a.userId === userId && getFrozenWeeksMap(a)[weekId] != null)
+      .map((a) => {
+        const range = getAbsenceRange(a)
+        return range && range.startWeekId !== range.endWeekId
+          ? `${range.startWeekId}→${range.endWeekId}`
+          : weekId
+      })
+    lines.push(
+      `- Sesiones CONGELADAS esta semana: ${frozenSessions} (congelamiento PARCIAL vigente,` +
+      ` pedido con anticipación${covering.length ? `; ausencia que cubre ${covering.join(', ')}` : ''}).` +
+      ` La parte previsible ya está cubierta por este congelamiento.`
+    )
+  } else {
+    lines.push('- Sesiones congeladas esta semana: 0 (no hay ausencia planificada registrada).')
+  }
+
+  lines.push(`- Sesiones EXIGIBLES tras el congelamiento: ${totalRequired}`)
+  lines.push(
+    `- Sesiones registradas: ${workoutDates.length}` +
+    (workoutDates.length ? ` (${workoutDates.map(shortDate).join(', ')})` : '')
+  )
+  if (typeof sessionsJustified === 'number' && sessionsJustified > 0) {
+    lines.push(`- Sesiones que pide justificar: ${sessionsJustified}`)
+  }
+
+  return `CONTEXTO DE LA SEMANA (datos del sistema, confiables):\n${lines.join('\n')}`
+}
+
 export const evaluateJustification = onCall(
   { secrets: [anthropicApiKey], maxInstances: 5 },
   async (request) => {
-    const { excuse, photoBase64 } = request.data
+    const { excuse, photoBase64, userId, weekId, sessionsJustified } = request.data
     if (!excuse || typeof excuse !== 'string' || excuse.trim().length < 15) {
       throw new HttpsError('invalid-argument', 'La justificación debe tener al menos 15 caracteres.')
     }
 
     try {
       const client = new Anthropic({ apiKey: anthropicApiKey.value() })
+
+      let weekContext = null
+      try {
+        weekContext = await buildWeekContext(userId, weekId, sessionsJustified)
+      } catch (err) {
+        // A missing context makes the judge blinder, not broken — never fail the
+        // whole evaluation over it.
+        console.warn('Could not build week context for the AI judge:', err.message)
+      }
 
       // Build message content
       const content = []
@@ -829,7 +949,10 @@ export const evaluateJustification = onCall(
 
       content.push({
         type: 'text',
-        text: `JUSTIFICACIÓN DEL USUARIO:\n"${excuse.trim()}"${photoBase64 ? '\n\n(El usuario adjuntó una imagen como evidencia. Evalúala.)' : ''}`,
+        text: `${weekContext
+          ? `${weekContext}\n\n`
+          : 'CONTEXTO DE LA SEMANA: no disponible. No asumas que no hubo congelamiento; juzga el relato.\n\n'
+        }JUSTIFICACIÓN DEL USUARIO:\n"${excuse.trim()}"${photoBase64 ? '\n\n(El usuario adjuntó una imagen como evidencia. Evalúala.)' : ''}`,
       })
 
       const msg = await client.messages.create({
