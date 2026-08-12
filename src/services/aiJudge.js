@@ -1,6 +1,6 @@
 /**
- * AI Judge Service — Calls Firebase Cloud Function that uses Claude Haiku
- * to evaluate exercise excuses.
+ * AI Judge Service — Calls Firebase Cloud Function that uses GPT-5.6 Luna
+ * (OpenAI) to evaluate exercise excuses.
  *
  * The AI evaluates whether an excuse for missing the weekly goal is valid.
  * Only UNFORESEEN situations qualify (illness, injury, emergency).
@@ -17,7 +17,7 @@ const functions = getFunctions(app)
 const evaluateJustificationFn = httpsCallable(functions, 'evaluateJustification')
 
 /**
- * Evaluate an excuse using the Cloud Function (Claude Haiku).
+ * Evaluate an excuse using the Cloud Function (GPT-5.6 Luna).
  *
  * `context` lets the judge see the week as the game sees it — above all whether
  * a PARTIAL freeze is already in place, so a trip that was frozen through

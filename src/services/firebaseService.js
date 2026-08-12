@@ -29,6 +29,19 @@ const weeklySummariesCol = () => collection(db, 'weekly_summaries')
 const absencesCol = () => collection(db, 'absences')
 const flaggedWorkoutsCol = () => collection(db, 'flagged_workouts')
 
+// ── Custom sports (family-shared list, doc settings/customSports) ──
+export function subscribeCustomSports(callback, onError) {
+  return onSnapshot(
+    doc(db, 'settings', 'customSports'),
+    (snap) => callback(snap.exists() ? snap.data().list || [] : []),
+    onError
+  )
+}
+
+export async function addCustomSport(name) {
+  await setDoc(doc(db, 'settings', 'customSports'), { list: arrayUnion(name) }, { merge: true })
+}
+
 // ── Users ────────────────────────────────────────────────────
 export async function getUsers() {
   const snap = await getDocs(usersCol())

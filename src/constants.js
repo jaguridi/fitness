@@ -70,6 +70,7 @@ export const EXERCISE_TYPES = [
   'Baile',
   'Tenis',
   'Pádel',
+  'Squash',
   'Boxeo',
   'Artes Marciales',
   'Escalada',

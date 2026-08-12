@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { format } from 'date-fns'
-import { EXERCISE_TYPES } from '../constants'
 import { addWorkout, uploadWorkoutPhoto } from '../services/firebaseService'
 import { getWeekId } from '../hooks/useWeekId'
 import { useAuth } from '../context/AuthContext'
 import Avatar from './Avatar'
+import ExerciseTypePicker from './ExerciseTypePicker'
 import Modal, { ModalHeader } from './ui/Modal'
 import { compressImageWithObjectURL } from '../utils/compressImage'
 import { validatePhotoDate } from '../utils/extractPhotoDate'
@@ -181,29 +181,7 @@ export default function WorkoutLogger({ onClose, onSuccess }) {
                 (puedes elegir varios)
               </span>
             </label>
-            <div className="flex flex-wrap gap-1.5">
-              {EXERCISE_TYPES.map((t) => {
-                const selected = exerciseTypes.includes(t)
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => {
-                      setExerciseTypes((prev) =>
-                        prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
-                      )
-                    }}
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all active:scale-95 ${
-                      selected
-                        ? 'bg-indigo-600 text-white ring-1 ring-indigo-400'
-                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    }`}
-                  >
-                    {selected && '✓ '}{t}
-                  </button>
-                )
-              })}
-            </div>
+            <ExerciseTypePicker selected={exerciseTypes} onChange={setExerciseTypes} />
             {exerciseTypes.length > 0 && (
               <p className="mt-1.5 text-xs text-indigo-400">
                 {exerciseTypes.length === 1

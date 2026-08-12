@@ -93,9 +93,13 @@ service cloud.firestore {
     }
 
     // App meta: the week-end processing lock lives here.
+    // customSports: family-shared list of extra exercise types added in-app.
     match /settings/{docId} {
       allow read: if true;
-      allow write: if docId == 'meta';
+      allow write: if docId == 'meta'
+        || (docId == 'customSports'
+            && request.resource.data.keys().hasOnly(['list'])
+            && request.resource.data.list is list);
     }
 
     // Everything else: denied.

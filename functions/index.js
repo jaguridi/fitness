@@ -26,7 +26,7 @@ import { defineSecret } from 'firebase-functions/params'
 import { initializeApp } from 'firebase-admin/app'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { getMessaging } from 'firebase-admin/messaging'
-import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
 
 import { getWeekId, getPreviousWeekId, getWeekRange } from './game/weekId.js'
 import {
@@ -42,7 +42,9 @@ import { USER_IDS, USER_GENDER } from './game/constants.js'
 const gword = (userId, female, male) => (USER_GENDER[userId] === 'f' ? female : male)
 const genderLabel = (userId) => (USER_GENDER[userId] === 'f' ? 'mujer' : 'hombre')
 
-const anthropicApiKey = defineSecret('ANTHROPIC_API_KEY')
+// Note: the secret in Secret Manager is named OPEN_AI_KEY (not the
+// conventional OPENAI_API_KEY) — it was created by hand in the console.
+const openaiApiKey = defineSecret('OPEN_AI_KEY')
 
 initializeApp()
 const db = getFirestore()
@@ -537,7 +539,7 @@ export const sendNudge = onCall(
 
 // ── 7. Weekly Recap — Generate a fun AI-powered summary ───────
 export const generateWeeklyRecap = onCall(
-  { secrets: [anthropicApiKey], maxInstances: 2 },
+  { secrets: [openaiApiKey], maxInstances: 2 },
   async (request) => {
     const { weekId } = request.data
     if (!weekId) throw new HttpsError('invalid-argument', 'weekId is required.')
@@ -588,24 +590,27 @@ export const generateWeeklyRecap = onCall(
     }).join('\n')
 
     try {
-      const client = new Anthropic({ apiKey: anthropicApiKey.value() })
-      const msg = await client.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 300,
-        system: `Eres el narrador divertido del reto fitness familiar "FitFamily".
+      const client = new OpenAI({ apiKey: openaiApiKey.value() })
+      const completion = await client.chat.completions.create({
+        model: 'gpt-5.6-luna',
+        reasoning_effort: 'high',
+        max_completion_tokens: 8000,
+        messages: [{
+          role: 'system',
+          content: `Eres el narrador divertido del reto fitness familiar "FitFamily".
 Genera un resumen semanal breve y entretenido (máximo 4-5 frases) en español chileno informal.
 Usa humor, sarcasmo cariñoso y referencias deportivas. Celebra a los que cumplieron y molesta (con cariño) a los que no.
 Incluye 2-3 emojis. NO uses formato markdown. Solo texto plano con saltos de línea.
 Si alguien ganó un escudo o vida extra, celébralo. Si alguien pagó multa, menciónalo con humor.
 El género de cada persona va entre paréntesis (hombre/mujer): respétalo SIEMPRE al conjugar
 adjetivos y artículos (ej.: para una mujer usa "cansada", "la campeona", no "cansado").`,
-        messages: [{
+        }, {
           role: 'user',
           content: `Resumen de la semana ${weekId}:\n${summaryText}`,
         }],
       })
 
-      const recap = msg.content[0]?.text || 'No se pudo generar el resumen.'
+      const recap = completion.choices[0]?.message?.content || 'No se pudo generar el resumen.'
 
       // Store in Firestore
       const recapData = { weekId, recap, summaries, createdAt: new Date() }
@@ -621,7 +626,7 @@ adjetivos y artículos (ej.: para una mujer usa "cansada", "la campeona", no "ca
 
 // ── 7b. Monthly Recap — Generate a fun AI-powered monthly summary ──
 export const generateMonthlyRecap = onCall(
-  { secrets: [anthropicApiKey], maxInstances: 2 },
+  { secrets: [openaiApiKey], maxInstances: 2 },
   async (request) => {
     const { monthId } = request.data // format: "YYYY-MM"
     if (!monthId || !/^\d{4}-\d{2}$/.test(monthId)) {
@@ -728,11 +733,14 @@ export const generateMonthlyRecap = onCall(
     const monthLabel = `${monthNames[month - 1]} ${year}`
 
     try {
-      const client = new Anthropic({ apiKey: anthropicApiKey.value() })
-      const msg = await client.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 500,
-        system: `Eres el narrador del reto fitness familiar "FitFamily". Escribe un recap mensual
+      const client = new OpenAI({ apiKey: openaiApiKey.value() })
+      const completion = await client.chat.completions.create({
+        model: 'gpt-5.6-luna',
+        reasoning_effort: 'high',
+        max_completion_tokens: 8000,
+        messages: [{
+          role: 'system',
+          content: `Eres el narrador del reto fitness familiar "FitFamily". Escribe un recap mensual
 en español chileno informal (6-8 frases) con humor cariñoso y referencias deportivas.
 Estructura sugerida:
 1. Una oración de apertura sobre el mes
@@ -744,13 +752,13 @@ Estructura sugerida:
 El género de cada persona va entre paréntesis (hombre/mujer): respétalo SIEMPRE al conjugar
 adjetivos y artículos (ej.: para una mujer usa "cansada", "la campeona", no "cansado").
 No uses markdown. Solo texto plano con saltos de línea. Máximo 3 emojis en total.`,
-        messages: [{
+        }, {
           role: 'user',
           content: `Resumen mensual de ${monthLabel}:\n${summaryText}`,
         }],
       })
 
-      const recap = msg.content[0]?.text || 'No se pudo generar el resumen.'
+      const recap = completion.choices[0]?.message?.content || 'No se pudo generar el resumen.'
       const recapData = {
         monthId,
         monthLabel,
@@ -772,7 +780,7 @@ No uses markdown. Solo texto plano con saltos de línea. Máximo 3 emojis en tot
   }
 )
 
-// ── 8. AI Judge — Evaluate justifications with Claude ─────────
+// ── 8. AI Judge — Evaluate justifications with GPT-5.6 Luna ───
 
 const AI_JUDGE_PROMPT = `Eres el juez del reto fitness familiar "FitFamily": estricto con las excusas fáciles,
 justo con lo que de verdad estuvo fuera del control de la persona.
@@ -915,7 +923,7 @@ async function buildWeekContext(userId, weekId, sessionsJustified) {
 }
 
 export const evaluateJustification = onCall(
-  { secrets: [anthropicApiKey], maxInstances: 5 },
+  { secrets: [openaiApiKey], maxInstances: 5 },
   async (request) => {
     const { excuse, photoBase64, userId, weekId, sessionsJustified } = request.data
     if (!excuse || typeof excuse !== 'string' || excuse.trim().length < 15) {
@@ -923,7 +931,7 @@ export const evaluateJustification = onCall(
     }
 
     try {
-      const client = new Anthropic({ apiKey: anthropicApiKey.value() })
+      const client = new OpenAI({ apiKey: openaiApiKey.value() })
 
       let weekContext = null
       try {
@@ -937,14 +945,9 @@ export const evaluateJustification = onCall(
       // Build message content
       const content = []
 
-      // Add photo if provided
+      // Add photo if provided (OpenAI accepts the data URL directly)
       if (photoBase64 && photoBase64.startsWith('data:')) {
-        const base64Data = photoBase64.split(',')[1]
-        const mimeType = photoBase64.match(/data:(.*?);/)?.[1] || 'image/jpeg'
-        content.push({
-          type: 'image',
-          source: { type: 'base64', media_type: mimeType, data: base64Data },
-        })
+        content.push({ type: 'image_url', image_url: { url: photoBase64 } })
       }
 
       content.push({
@@ -955,24 +958,31 @@ export const evaluateJustification = onCall(
         }JUSTIFICACIÓN DEL USUARIO:\n"${excuse.trim()}"${photoBase64 ? '\n\n(El usuario adjuntó una imagen como evidencia. Evalúala.)' : ''}`,
       })
 
-      const msg = await client.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 200,
-        system: AI_JUDGE_PROMPT,
-        messages: [{ role: 'user', content }],
+      // gpt-5.6-luna is a reasoning model: high effort for better verdicts
+      // (still ~fractions of a cent per call), with enough completion budget
+      // that reasoning tokens can't starve the JSON answer.
+      const completion = await client.chat.completions.create({
+        model: 'gpt-5.6-luna',
+        reasoning_effort: 'high',
+        max_completion_tokens: 8000,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: AI_JUDGE_PROMPT },
+          { role: 'user', content },
+        ],
       })
 
-      const text = msg.content[0]?.text || ''
+      const text = completion.choices[0]?.message?.content || ''
       const jsonMatch = text.match(/\{[\s\S]*\}/)
       if (!jsonMatch) {
-        console.error('Could not parse Claude response:', text)
+        console.error('Could not parse AI judge response:', text)
         return { valid: false, reason: text || 'No se pudo interpretar la respuesta.', aiError: true }
       }
 
       const result = JSON.parse(jsonMatch[0])
       return { valid: Boolean(result.valid), reason: result.reason || 'Sin explicación.' }
     } catch (err) {
-      console.error('Claude AI Judge error:', err)
+      console.error('AI Judge (gpt-5.6-luna) error:', err)
       return {
         valid: false,
         reason: 'Error al evaluar la justificación. Será enviada a votación familiar.',

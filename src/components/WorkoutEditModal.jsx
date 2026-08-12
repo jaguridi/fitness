@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { EXERCISE_TYPES, getExerciseTypes } from '../constants'
+import { getExerciseTypes } from '../constants'
 import { updateWorkout, deleteWorkout } from '../services/firebaseService'
 import Modal, { ModalHeader } from './ui/Modal'
+import ExerciseTypePicker from './ExerciseTypePicker'
 
 /**
  * Edit modal for an owned workout, within the 24h window.
@@ -72,29 +73,7 @@ export default function WorkoutEditModal({ workout, onClose, onSaved, onDeleted 
             <label className="block text-sm font-medium text-gray-300 mb-1">
               Tipo de ejercicio
             </label>
-            <div className="flex flex-wrap gap-1.5">
-              {EXERCISE_TYPES.map((t) => {
-                const selected = exerciseTypes.includes(t)
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() =>
-                      setExerciseTypes((prev) =>
-                        prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
-                      )
-                    }
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all active:scale-95 ${
-                      selected
-                        ? 'bg-indigo-600 text-white ring-1 ring-indigo-400'
-                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    }`}
-                  >
-                    {selected && '✓ '}{t}
-                  </button>
-                )
-              })}
-            </div>
+            <ExerciseTypePicker selected={exerciseTypes} onChange={setExerciseTypes} />
           </div>
 
           {/* Duration + Calories */}
