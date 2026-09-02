@@ -10,9 +10,11 @@
 //   - New:    { frozenWeeks: { [weekId]: count } }
 //     Recovery is automatic: extras above WEEKLY_GOAL in the ±4 ACTIVE weeks
 //     around the freeze range pay down debt (FIFO). Weeks frozen by another
-//     absence don't count toward the ±4 — the window skips them and extends
-//     outward to reach 4 genuinely active weeks on each side. Extras consumed
-//     for debt don't count toward EXTRA_LIFE_THRESHOLD.
+//     absence don't count toward the ±4 — the window extends outward to reach
+//     4 genuinely active weeks on each side. FULLY frozen weeks (≥ WEEKLY_GOAL
+//     sessions frozen) are dropped from the window; PARTIALLY frozen weeks stay
+//     in it, so a real extra (a 4th session) done there still pays debt.
+//     Extras consumed for debt don't count toward EXTRA_LIFE_THRESHOLD.
 //     An optional `extraRecoveryWeeks: N` grants that absence N more ACTIVE
 //     weeks at the END of its window — a one-off deadline extension.
 //
@@ -58,27 +60,44 @@ function extraRecoveryWeeks(a) {
 }
 
 /**
- * Weeks frozen by the user's OTHER absences (any status/format) — the weeks an
- * auto-recovery window must skip so a second freeze doesn't count toward the
- * ±4 active-week padding.
+ * Sessions frozen per week for one user, summed across the given absences
+ * (any status/format). `{ [weekId]: count }`.
+ */
+function frozenTotalsByWeek(userId, absences) {
+  const totals = {}
+  for (const a of absences || []) {
+    if (a.userId !== userId) continue
+    for (const [wk, n] of Object.entries(getFrozenWeeksMap(a))) totals[wk] = (totals[wk] || 0) + n
+  }
+  return totals
+}
+
+/**
+ * Weeks frozen by the user's OTHER absences, split by how much is frozen.
+ * Neither kind counts toward the ±4 active-week padding, so a second freeze
+ * never eats an absence's recovery time. `full` weeks (≥ WEEKLY_GOAL frozen)
+ * are dropped from the window entirely; `partial` ones stay in it because the
+ * user can still do a real extra there.
  */
 function otherFrozenWeeks(a, allAbsences) {
-  const skip = new Set()
-  if (!allAbsences) return skip
-  for (const other of allAbsences) {
-    if (other === a || (a.id != null && other.id === a.id)) continue
-    if (other.userId !== a.userId) continue
-    for (const wk of Object.keys(getFrozenWeeksMap(other))) skip.add(wk)
+  const full = new Set()
+  const partial = new Set()
+  if (!allAbsences) return { full, partial }
+  const others = allAbsences.filter((o) => !(o === a || (a.id != null && o.id === a.id)))
+  for (const [wk, n] of Object.entries(frozenTotalsByWeek(a.userId, others))) {
+    if (n >= WEEKLY_GOAL) full.add(wk)
+    else partial.add(wk)
   }
-  return skip
+  return { full, partial }
 }
 
 export function getAbsenceRecoveryWindow(a, allAbsences = null) {
   const range = getAbsenceRange(a)
   if (!range) return []
+  const { full, partial } = otherFrozenWeeks(a, allAbsences)
   return getRecoveryWindow(
-    range.startWeekId, range.endWeekId, RECOVERY_PADDING, otherFrozenWeeks(a, allAbsences),
-    RECOVERY_PADDING + extraRecoveryWeeks(a)
+    range.startWeekId, range.endWeekId, RECOVERY_PADDING, full,
+    RECOVERY_PADDING + extraRecoveryWeeks(a), partial
   )
 }
 
@@ -117,17 +136,22 @@ export function simulateAutoRecovery(absences, sessionsByUserWeek) {
 
   // Per-week budget of extras already consumed (across absences for the same user/week).
   const extrasConsumedSoFar = {} // `${userId}|${weekId}` → number
+  // Per-user frozen sessions per week, across ALL their absences.
+  const frozenTotalsByUser = {}
 
   for (const a of newAbsences) {
     const frozenMap = getFrozenWeeksMap(a)
     const totalDebt = Object.values(frozenMap).reduce((s, n) => s + n, 0)
     let remaining = totalDebt
     debtConsumedPerAbsenceWeek[a.id] = {}
+    const frozenTotals = frozenTotalsByUser[a.userId] ??= frozenTotalsByWeek(a.userId, absences)
 
     const window = getAbsenceRecoveryWindow(a, absences)
     for (const wk of window) {
       if (remaining <= 0) break
-      if (frozenMap[wk] != null) continue // skip the absence's own frozen weeks
+      // Skip FULLY frozen weeks (own or combined) — nothing is expected there.
+      // A partially frozen week stays: a session above WEEKLY_GOAL is a real extra.
+      if ((frozenTotals[wk] || 0) >= WEEKLY_GOAL) continue
       const sessions = sessionsByUserWeek?.[a.userId]?.[wk] || 0
       const totalExtras = Math.max(0, sessions - WEEKLY_GOAL)
       const key = `${a.userId}|${wk}`

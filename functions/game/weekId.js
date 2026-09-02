@@ -111,25 +111,39 @@ export function getWeeksBetween(startWeekId, endWeekId) {
  *
  * `paddingAfter` overrides the trailing side only (defaults to `padding`), so a
  * deadline can be extended without also reaching further back for old extras.
+ *
+ * `partialWeeks` (e.g. weeks only PARTIALLY frozen by a second absence) are
+ * kept IN the window — extras done there can still pay debt — but, like
+ * `frozenWeeks`, they don't count toward the padding, so the deadline is the
+ * same as if they were skipped. A week in both sets is skipped.
  */
-export function getRecoveryWindow(startWeekId, endWeekId, padding = 4, frozenWeeks = null, paddingAfter = null) {
+export function getRecoveryWindow(startWeekId, endWeekId, padding = 4, frozenWeeks = null, paddingAfter = null, partialWeeks = null) {
   if (!startWeekId || !endWeekId) return []
   const skip = frozenWeeks instanceof Set ? frozenWeeks : new Set(frozenWeeks || [])
+  const partial = partialWeeks instanceof Set ? partialWeeks : new Set(partialWeeks || [])
   const trailing = typeof paddingAfter === 'number' && paddingAfter >= 0 ? paddingAfter : padding
 
   const before = []
+  let counted = 0
   let cursor = getPreviousWeekId(startWeekId)
-  for (let guard = 0; guard < 104 && before.length < padding; guard++) {
-    if (!skip.has(cursor)) before.unshift(cursor)
+  for (let guard = 0; guard < 104 && counted < padding; guard++) {
+    if (!skip.has(cursor)) {
+      before.unshift(cursor)
+      if (!partial.has(cursor)) counted++
+    }
     cursor = getPreviousWeekId(cursor)
   }
 
   const range = getWeeksBetween(startWeekId, endWeekId)
 
   const after = []
+  counted = 0
   cursor = getNextWeekId(endWeekId)
-  for (let guard = 0; guard < 104 && after.length < trailing; guard++) {
-    if (!skip.has(cursor)) after.push(cursor)
+  for (let guard = 0; guard < 104 && counted < trailing; guard++) {
+    if (!skip.has(cursor)) {
+      after.push(cursor)
+      if (!partial.has(cursor)) counted++
+    }
     cursor = getNextWeekId(cursor)
   }
 

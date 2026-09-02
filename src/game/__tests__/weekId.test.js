@@ -155,6 +155,17 @@ describe('getRecoveryWindow', () => {
     ])
   })
 
+  it('keeps partialWeeks in the window but does not count them toward padding', () => {
+    const window = getRecoveryWindow('2026-W10', '2026-W10', 4, ['2026-W08'], null, ['2026-W12'])
+    expect(window).toEqual([
+      '2026-W05', '2026-W06', '2026-W07', '2026-W09',
+      '2026-W10',
+      '2026-W11', '2026-W12', '2026-W13', '2026-W14', '2026-W15',
+    ])
+    // A week in both sets is skipped.
+    expect(getRecoveryWindow('2026-W10', '2026-W10', 4, ['2026-W12'], null, ['2026-W12'])).not.toContain('2026-W12')
+  })
+
   it('extends only the trailing side when paddingAfter is given', () => {
     const window = getRecoveryWindow('2026-W10', '2026-W10', 4, null, 6)
     // Leading side untouched — no reaching further back for old extras.
