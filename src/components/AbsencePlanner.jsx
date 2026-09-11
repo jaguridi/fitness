@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { WEEKLY_GOAL } from '../constants'
+import { WEEKLY_GOAL, formatCLP } from '../constants'
 import {
   addAbsence,
   updateAbsence,
@@ -11,6 +11,7 @@ import {
   getWeeksBetween,
   getRecoveryWindow,
 } from '../hooks/useWeekId'
+import { getAbsenceRecoveryWindow } from '../game/absences.js'
 import Avatar from './Avatar'
 import { useAuth } from '../context/AuthContext'
 import Card from './ui/Card'
@@ -32,7 +33,13 @@ function summarizeFrozenWeeks(frozenWeeks) {
   return `${formatWeekLabel(ids[0])} → ${formatWeekLabel(ids[ids.length - 1])} · ${total} ses. totales`
 }
 
-export default function AbsencePlanner({ absences = [], onChange }) {
+/**
+ * @param {object[]} absences  every absence (all users)
+ * @param {function} onChange  called after create/edit/delete
+ * @param {object|null} recovery  live simulateAutoRecovery() result, so each
+ *   freeze can show its own debt, what already paid it, and its deadline.
+ */
+export default function AbsencePlanner({ absences = [], onChange, recovery = null }) {
   const { currentUser } = useAuth()
   const userId = currentUser?.id || ''
 
@@ -320,11 +327,29 @@ export default function AbsencePlanner({ absences = [], onChange }) {
       {/* List existing absences for the current user */}
       {myAbsences.length > 0 && (
         <div className="mt-6 border-t border-gray-700 pt-4">
-          <h4 className="text-sm font-semibold text-gray-300 mb-2">Tus congelamientos</h4>
+          <h4 className="text-sm font-semibold text-gray-300 mb-1">Tus congelamientos</h4>
+          <p className="text-[11px] text-gray-500 mb-2">
+            Cada sesión que haces por sobre lo exigible de una semana (meta menos congeladas) paga
+            deuda, empezando por el congelamiento más antiguo.
+          </p>
           <div className="space-y-2">
             {myAbsences.map((a) => {
               const isLegacy = !a.frozenWeeks
               const closed = a.status === 'closed'
+              // Per-freeze ledger: how much it owed, what has paid it and until when.
+              const totalDebt = isLegacy
+                ? 0
+                : Object.values(a.frozenWeeks).reduce((s, n) => s + n, 0)
+              const consumedMap = recovery?.debtConsumedPerAbsenceWeek?.[a.id] || {}
+              const paidWeeks = Object.entries(consumedMap)
+                .filter(([, n]) => n > 0)
+                .sort(([w1], [w2]) => w1.localeCompare(w2))
+              const paid = paidWeeks.reduce((s, [, n]) => s + n, 0)
+              const remaining = closed
+                ? (a.debtUnpaid || 0)
+                : (recovery?.remainingDebtByAbsence?.[a.id] ?? Math.max(0, totalDebt - paid))
+              const window = !isLegacy ? getAbsenceRecoveryWindow(a, absences) : []
+              const deadline = window[window.length - 1]
               return (
                 <div
                   key={a.id}
@@ -344,16 +369,25 @@ export default function AbsencePlanner({ absences = [], onChange }) {
                       <p className="text-xs text-gray-400 mt-0.5">
                         {closed
                           ? a.debtUnpaid > 0
-                            ? `Cerrado · deuda no pagada: ${a.debtUnpaid} ses. (multa aplicada)`
-                            : 'Cerrado · deuda completada'
+                            ? `Cerrado · pagaste ${Math.max(0, totalDebt - a.debtUnpaid)} de ${totalDebt} · ${a.debtUnpaid} sin pagar → multa ${formatCLP(a.fineApplied || 0)}`
+                            : `Cerrado · pagaste ${totalDebt} de ${totalDebt} ✅`
                           : isLegacy
                           ? 'Recuperación manual (formato antiguo)'
-                          : `Activo · recuperación automática ±4 semanas activas${
-                              a.extraRecoveryWeeks > 0
-                                ? ` + ${a.extraRecoveryWeeks} de prórroga`
-                                : ''
+                          : `Activo · deuda ${totalDebt} · pagadas ${paid} · faltan ${remaining}${
+                              deadline ? ` · plazo: semana del ${formatWeekLabel(deadline)}` : ''
                             }`}
                       </p>
+                      {!isLegacy && paidWeeks.length > 0 && (
+                        <p className="text-[11px] text-emerald-400/80 mt-0.5">
+                          Pagado con extras de: {paidWeeks.map(([wk, n]) => `${formatWeekLabel(wk)} (${n})`).join(' · ')}
+                        </p>
+                      )}
+                      {!closed && !isLegacy && remaining > 0 && (
+                        <p className="text-[11px] text-gray-500 mt-0.5">
+                          Ventana ±4 semanas activas{a.extraRecoveryWeeks > 0 ? ` + ${a.extraRecoveryWeeks} de prórroga` : ''}.
+                          Si al vencer queda deuda, se cobra proporcional a tu nivel de multa.
+                        </p>
+                      )}
                       {!closed && a.extraRecoveryWeeks > 0 && (
                         <p className="text-xs text-cyan-400/80 mt-0.5">
                           🎁 Prórroga extraordinaria: {a.extraRecoveryWeeks} semanas activas extra

@@ -161,12 +161,12 @@ describe('computeWeekRequirements', () => {
 })
 
 describe('simulateAutoRecovery', () => {
-  it('consumes extras FIFO inside the window, skipping frozen weeks', () => {
+  it('consumes extras FIFO inside the window (earliest week first)', () => {
     const a = { id: 'a1', userId: U, frozenWeeks: { '2026-W10': 3 } }
     const sessions = {
       [U]: {
         '2026-W08': 5, // 2 extras (before the freeze)
-        '2026-W10': 4, // frozen week itself — must be skipped
+        '2026-W10': 0, // frozen week, nothing done
         '2026-W12': 4, // 1 extra
       },
     }
@@ -176,29 +176,54 @@ describe('simulateAutoRecovery', () => {
     expect(r.debtConsumedByUserWeek[U]).toEqual({ '2026-W08': 2, '2026-W12': 1 })
   })
 
-  it('lets a 4th session in a PARTIALLY frozen week pay debt (own or other absence)', () => {
-    // a1 owes 3 (W10). a2 partially freezes W12 (2 of 3) and owes 2.
-    // W12: 4 sessions → 1 real extra. It must pay a1 first (FIFO), even though
-    // W12 is frozen by a2 — and a2's own partial week can pay a2 too.
+  it('sessions done in the absence’s OWN fully frozen week repay that freeze', () => {
+    // Nothing was required in W10 (fully frozen), so every session there is an
+    // extra — training through a freeze must never leave debt behind.
+    const a = { id: 'a1', userId: U, frozenWeeks: { '2026-W10': 3 } }
+    const r = simulateAutoRecovery([a], { [U]: { '2026-W08': 5, '2026-W10': 4, '2026-W12': 4 } })
+    // W08 pays 2, W10 pays the last 1 (before W12 is ever reached)
+    expect(r.debtConsumedPerAbsenceWeek.a1).toEqual({ '2026-W08': 2, '2026-W10': 1 })
+    expect(r.remainingDebtByAbsence.a1).toBe(0)
+  })
+
+  it('counts extras above the week’s REAL requirement in a partially frozen week', () => {
+    // a1 owes 3 (W10). a2 freezes 2 of 3 in W12, so W12 only requires 1.
+    // W12: 4 sessions → 3 extras (not 1). FIFO: a1 takes all 3; a2 still owes 2.
     const a1 = { id: 'a1', userId: U, frozenWeeks: { '2026-W10': 3 }, createdAt: { seconds: 1 } }
     const a2 = { id: 'a2', userId: U, frozenWeeks: { '2026-W12': 2 }, createdAt: { seconds: 2 } }
     const r = simulateAutoRecovery([a1, a2], { [U]: { '2026-W12': 4 } })
-    expect(r.debtConsumedPerAbsenceWeek.a1).toEqual({ '2026-W12': 1 })
-    expect(r.remainingDebtByAbsence.a1).toBe(2)
+    expect(r.debtConsumedPerAbsenceWeek.a1).toEqual({ '2026-W12': 3 })
+    expect(r.remainingDebtByAbsence.a1).toBe(0)
     expect(r.remainingDebtByAbsence.a2).toBe(2)
 
-    // With a1 already paid, the same extra goes to a2 from its own partial week.
+    // Alone, a2's own partial week repays a2 in full (3 extras ≥ 2 of debt).
     const r2 = simulateAutoRecovery([a2], { [U]: { '2026-W12': 4 } })
-    expect(r2.debtConsumedPerAbsenceWeek.a2).toEqual({ '2026-W12': 1 })
-    expect(r2.remainingDebtByAbsence.a2).toBe(1)
+    expect(r2.debtConsumedPerAbsenceWeek.a2).toEqual({ '2026-W12': 2 })
+    expect(r2.remainingDebtByAbsence.a2).toBe(0)
   })
 
-  it('never pays debt from a FULLY frozen week, even with sessions logged', () => {
+  it('freezing 1 session and still training 3 times is neutral (the freeze repays itself)', () => {
+    // Gonza’s W35 case: 1 frozen → 2 required; 3 done → 1 extra → own debt paid.
+    const a = { id: 'a1', userId: U, frozenWeeks: { '2026-W12': 1 } }
+    const r = simulateAutoRecovery([a], { [U]: { '2026-W12': 3 } })
+    expect(r.debtConsumedPerAbsenceWeek.a1).toEqual({ '2026-W12': 1 })
+    expect(r.remainingDebtByAbsence.a1).toBe(0)
+    // And 4 sessions leave 1 genuine extra for older debt / the bank.
+    const older = { id: 'a0', userId: U, frozenWeeks: { '2026-W10': 3 }, createdAt: { seconds: 1 } }
+    const own = { ...a, createdAt: { seconds: 2 } }
+    const r2 = simulateAutoRecovery([older, own], { [U]: { '2026-W12': 4 } })
+    expect(r2.debtConsumedByUserWeek[U]['2026-W12']).toBe(2)
+    expect(r2.remainingDebtByAbsence.a0).toBe(1) // older absence took both extras (FIFO)
+    expect(r2.remainingDebtByAbsence.a1).toBe(1)
+  })
+
+  it('a week fully frozen by ANOTHER absence is outside the window, but repays its own absence', () => {
     const a1 = { id: 'a1', userId: U, frozenWeeks: { '2026-W10': 3 }, createdAt: { seconds: 1 } }
     const a2 = { id: 'a2', userId: U, frozenWeeks: { '2026-W12': 3 }, createdAt: { seconds: 2 } }
     const r = simulateAutoRecovery([a1, a2], { [U]: { '2026-W12': 5 } })
-    expect(r.debtConsumedPerAbsenceWeek.a1).toEqual({})
-    expect(r.debtConsumedPerAbsenceWeek.a2).toEqual({})
+    expect(r.debtConsumedPerAbsenceWeek.a1).toEqual({}) // W12 is not in a1's window
+    expect(r.debtConsumedPerAbsenceWeek.a2).toEqual({ '2026-W12': 3 })
+    expect(r.remainingDebtByAbsence.a2).toBe(0)
   })
 
   it('reports remaining debt when extras don’t cover it', () => {

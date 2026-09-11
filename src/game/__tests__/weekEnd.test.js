@@ -194,6 +194,49 @@ describe('frozen weeks', () => {
     expect(summary.status).toBe('completed')
     expect(summary.totalRequired).toBe(1)
   })
+
+  it('a fully frozen week records the sessions done and the debt they repay', () => {
+    const user = freshUser('user1', { consecutiveSuccesses: 2 })
+    const { outcome, summary } = close({
+      user,
+      workouts: workoutsFor('user1', 2),
+      absences: [{ id: 'a1', userId: 'user1', frozenWeeks: { [WEEK]: 3 } }],
+    })
+    expect(summary.status).toBe('frozen')
+    expect(summary.sessions).toBe(2)
+    expect(summary.debtConsumed).toBe(2) // repaid 2 of the 3 frozen sessions
+    // Still neutral for streak / fines / bank: no user update at all.
+    expect(outcome.userUpdates.find((u) => u.userId === 'user1')).toBeUndefined()
+  })
+
+  it('in a partially frozen week, extras above the reduced requirement repay the freeze first', () => {
+    // 1 frozen → 2 required. 4 sessions → 2 extras: 1 repays the freeze itself,
+    // 1 is a genuine extra for the bank — exactly like 4 sessions in a normal week.
+    const user = freshUser('user1')
+    const { userUpdate, summary } = close({
+      user,
+      workouts: workoutsFor('user1', 4),
+      absences: [{ id: 'a1', userId: 'user1', frozenWeeks: { [WEEK]: 1 } }],
+    })
+    expect(summary.status).toBe('completed')
+    expect(summary.debtConsumed).toBe(1)
+    expect(summary.extrasBanked).toBe(1)
+    expect(summary.lifeEarned).toBe(false)
+    expect(userUpdate.bankedExtras).toBe(1)
+  })
+
+  it('freeze 1 + 5 sessions earns the life and banks like a normal 5-session week', () => {
+    const user = freshUser('user1')
+    const { userUpdate, summary } = close({
+      user,
+      workouts: workoutsFor('user1', EXTRA_LIFE_THRESHOLD),
+      absences: [{ id: 'a1', userId: 'user1', frozenWeeks: { [WEEK]: 1 } }],
+    })
+    expect(summary.debtConsumed).toBe(1)
+    expect(summary.lifeEarned).toBe(true)
+    expect(userUpdate.extraLives).toBe(1)
+    expect(summary.extrasBanked).toBe(2) // same as 5 sessions with no freeze
+  })
 })
 
 describe('extras bank', () => {
@@ -377,6 +420,13 @@ describe('getSimulationWeeks', () => {
     expect(weeks).toContain(WEEK)
     expect(weeks).toContain('2026-W18') // window start
     expect(weeks).not.toContain('2026-W24') // future weeks excluded
+  })
+
+  it('includes the windows of CLOSED absences so their consumed extras stay reserved', () => {
+    const closed = { id: 'c', userId: 'user1', frozenWeeks: { '2026-W15': 3 }, status: 'closed' }
+    const weeks = getSimulationWeeks(WEEK, [closed])
+    expect(weeks).toContain('2026-W11') // its window start (4 active weeks before W15)
+    expect(weeks).toContain('2026-W19') // its window end
   })
 })
 

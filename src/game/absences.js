@@ -5,12 +5,19 @@
 //   - Legacy: { frozenWeekId, frozenSessions, recoveryWeeks, missedSessionsPerRecoveryWeek }
 //     User picks recovery weeks manually. recoverySessions ADDS to weekly goal.
 //   - New:    { frozenWeeks: { [weekId]: count } }
-//     Recovery is automatic: extras above WEEKLY_GOAL in the ±4 ACTIVE weeks
-//     around the freeze range pay down debt (FIFO). Weeks frozen by another
-//     absence don't count toward the ±4 — the window extends outward to reach
-//     4 genuinely active weeks on each side. FULLY frozen weeks (≥ WEEKLY_GOAL
-//     sessions frozen) are dropped from the window; PARTIALLY frozen weeks stay
-//     in it, so a real extra (a 4th session) done there still pays debt.
+//     Recovery is automatic: EXTRAS in the ±4 ACTIVE weeks around the freeze
+//     range pay down debt (FIFO by absence creation). An extra is any session
+//     above what that week actually REQUIRED (WEEKLY_GOAL minus the sessions
+//     frozen there, plus legacy recovery) — so in a week where 1 session was
+//     frozen, the 3rd session is already an extra and repays the freeze itself.
+//     Freezing and then training anyway is therefore neutral: it never leaves
+//     debt behind that a full week of training wouldn't also have left.
+//     Weeks frozen by ANOTHER absence don't count toward the ±4 — the window
+//     extends outward to reach 4 genuinely active weeks on each side. Weeks
+//     FULLY frozen by another absence (≥ WEEKLY_GOAL sessions) are dropped from
+//     the window; PARTIALLY frozen weeks stay in it. An absence's OWN frozen
+//     weeks are in its window too: sessions done there (required = 0 when fully
+//     frozen) repay that same absence.
 //     Extras consumed for debt don't count toward EXTRA_LIFE_THRESHOLD.
 //     An optional `extraRecoveryWeeks: N` grants that absence N more ACTIVE
 //     weeks at the END of its window — a one-off deadline extension.
@@ -104,9 +111,40 @@ function createdAtMillis(a) {
 }
 
 /**
+ * Legacy-format recovery sessions manually scheduled onto `weekId` (they ADD to
+ * the weekly goal). New-format absences never contribute here.
+ */
+function legacyRecoverySessions(userId, weekId, absences) {
+  return absences
+    .filter((a) => a.userId === userId && isLegacyAbsence(a) && a.recoveryWeeks?.includes(weekId))
+    .reduce((sum, a) => sum + (a.missedSessionsPerRecoveryWeek?.[weekId] || 0), 0)
+}
+
+/**
+ * Sessions a week actually demands from the user once freezes are applied:
+ * WEEKLY_GOAL + legacy recovery − frozen (clamped at 0). Anything logged above
+ * this is an EXTRA that can pay recovery debt. Same arithmetic as
+ * computeWeekRequirements().totalRequired, exposed so the simulation and the
+ * UI can't drift apart.
+ */
+export function requiredSessionsForWeek(userId, weekId, absences, frozenTotals = null) {
+  const frozen = frozenTotals
+    ? (frozenTotals[weekId] || 0)
+    : (frozenTotalsByWeek(userId, absences)[weekId] || 0)
+  return Math.max(0, WEEKLY_GOAL + legacyRecoverySessions(userId, weekId, absences) - frozen)
+}
+
+/**
  * Greedy FIFO simulation: for each user, walks every new-format absence in
- * createdAt order, and consumes extras (sessions above WEEKLY_GOAL) from
- * non-frozen weeks in the recovery window to pay down debt.
+ * createdAt order, and consumes extras — sessions above what each week
+ * REQUIRED after freezes (see requiredSessionsForWeek) — from the weeks in the
+ * recovery window to pay down debt.
+ *
+ * Because the requirement already discounts frozen sessions, a partially (or
+ * fully) frozen week repays its own freeze first: freeze 1 and still train 3
+ * times → 1 extra → the frozen session is paid back, exactly as if the freeze
+ * had never happened. Weeks fully frozen by a DIFFERENT absence are not in the
+ * window at all (see getAbsenceRecoveryWindow).
  *
  * CLOSED absences are included so the extras they already consumed stay
  * reserved — otherwise a still-active absence would reuse the same sessions and
@@ -146,11 +184,11 @@ export function simulateAutoRecovery(absences, sessionsByUserWeek) {
     const window = getAbsenceRecoveryWindow(a, absences)
     for (const wk of window) {
       if (remaining <= 0) break
-      // Skip FULLY frozen weeks (own or combined) — nothing is expected there.
-      // A partially frozen week stays: a session above WEEKLY_GOAL is a real extra.
-      if ((frozenTotals[wk] || 0) >= WEEKLY_GOAL) continue
       const sessions = sessionsByUserWeek?.[a.userId]?.[wk] || 0
-      const totalExtras = Math.max(0, sessions - WEEKLY_GOAL)
+      // Extras are counted above the week's REAL requirement (goal minus frozen),
+      // so a session that "covers" a frozen one repays the freeze right there.
+      const required = requiredSessionsForWeek(a.userId, wk, absences, frozenTotals)
+      const totalExtras = Math.max(0, sessions - required)
       const key = `${a.userId}|${wk}`
       const already = extrasConsumedSoFar[key] || 0
       const available = Math.max(0, totalExtras - already)
@@ -180,9 +218,7 @@ export function simulateAutoRecovery(absences, sessionsByUserWeek) {
  */
 export function computeWeekRequirements(userId, weekId, absences) {
   // Legacy recovery sessions add to the goal
-  const recoverySessions = absences
-    .filter((a) => a.userId === userId && isLegacyAbsence(a) && a.recoveryWeeks?.includes(weekId))
-    .reduce((sum, a) => sum + (a.missedSessionsPerRecoveryWeek?.[weekId] || 0), 0)
+  const recoverySessions = legacyRecoverySessions(userId, weekId, absences)
 
   // Sum frozen sessions across both formats
   const frozenSessions = absences

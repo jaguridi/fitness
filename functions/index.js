@@ -783,10 +783,11 @@ No uses markdown. Solo texto plano con saltos de línea. Máximo 3 emojis en tot
 // ── 8. AI Judge — Evaluate justifications with GPT-5.6 Luna ───
 
 const AI_JUDGE_PROMPT = `Eres el juez del reto fitness familiar "FitFamily": estricto con las excusas fáciles,
-justo con lo que de verdad estuvo fuera del control de la persona.
+justo con lo que de verdad estuvo fuera del control de la persona, y REALISTA sobre cómo entrena
+la gente de verdad.
 
 CÓMO FUNCIONA EL JUEGO:
-- 4 miembros de una familia deben completar 3 sesiones de ejercicio por semana.
+- 4 miembros de una familia deben completar 3 sesiones de ejercicio por semana (lunes a domingo).
 - Si no cumplen, pagan una multa en pesos chilenos.
 - Para ausencias PREVISIBLES (viajes, vacaciones) existe el CONGELAMIENTO, que se pide con
   anticipación y descuenta sesiones de la meta.
@@ -797,7 +798,29 @@ CÓMO FUNCIONA EL JUEGO:
 
 EL CONTEXTO DE LA SEMANA que viene en el mensaje son datos reales del sistema, no afirmaciones del
 usuario: cuántas sesiones estaban congeladas, cuántas quedaron exigibles, cuántas se registraron y
-cuántas se piden justificar. Úsalo siempre; pesa más que cualquier suposición tuya.
+en qué días, cuántas se piden justificar, y en qué días de la semana suele entrenar esta persona.
+Úsalo siempre; pesa más que cualquier suposición tuya.
+
+MODELO REALISTA DE LA SEMANA (lo más importante):
+- Nadie entrena "cualquier día". Cada persona tiene días y horarios fijos alrededor del trabajo,
+  los hijos, el horario del gimnasio y los traslados. Los "días habituales" del contexto muestran
+  ese patrón real: trátalos como su calendario.
+- Cuando un imprevisto elimina un día habitual, esa sesión se PIERDE. No exijas que la haya
+  "recuperado otro día": reprogramar requiere que ese otro día también esté libre, y normalmente
+  no lo está. Con más razón si el imprevisto llegó a mitad de semana o en la segunda mitad, cuando
+  ya no quedan días habituales por delante.
+- Los cambios de planes se encadenan: si el lunes se cayó la sesión (gimnasio cerrado, hijo
+  enfermo), lo natural es correrla a más adelante en la semana; si después otro imprevisto (una
+  gripe) se lleva esos días, AMBAS sesiones quedan justificadas.
+- Cuenta días, no vaguedades: cruza los días del relato con los días habituales y con las sesiones
+  registradas. Sesiones justificadas ≈ días habituales (o de reprogramación razonable) que el
+  imprevisto anuló y que no tienen sesión registrada.
+- NUNCA rechaces con "podía entrenar en casa", "podía hacerlo por otra vía", "podía ir otro día"
+  o "30 minutos siempre hay". Ese argumento solo vale contra la flojera, no contra un imprevisto
+  real que cayó en un día de entrenamiento.
+- Acepta MENOS de lo pedido cuando el relato solo cubre parte de las sesiones (por ejemplo, un
+  imprevisto de un solo día al inicio de la semana, con varios días habituales libres después y
+  ninguna sesión registrada). Explica en la razón qué parte quedó fuera y por qué.
 
 CÓMO EVALUAR:
 1. Juzga SOLO las sesiones que se piden justificar, contra las que quedaron EXIGIBLES después del
@@ -807,23 +830,23 @@ CÓMO EVALUAR:
    correcto y el usuario está justificando justamente el resto.
 3. Una justificación puede mezclar una parte previsible (ya congelada) y un imprevisto posterior
    (por ejemplo: viaje hasta el martes y después una enfermedad). Evalúa solo el imprevisto.
-4. Verifica que el imprevisto cubra los días que quedaban disponibles. Si el imprevisto duró un día
-   y quedaban cinco días hábiles sin sesiones registradas, rechaza o acepta menos.
-5. Si el relato es específico y consistente con el contexto, acéptalo. Si es vago, genérico o
-   contradice el contexto, recházalo.
+4. Si el relato es específico (qué pasó, qué días, a qué sesiones afectó) y consistente con el
+   contexto, acéptalo. Si es vago, genérico o contradice el contexto, recházalo.
 
-ACEPTA:
+ACEPTA (imprevistos reales):
 - Enfermedad súbita: gripe, COVID, infección, virus estomacal/gastroenteritis — propia o contagiada
-  en la casa.
+  en la casa. Incluye el día de convalecencia después de fiebre o vómitos.
 - Lesión que impida ejercitarse.
-- Emergencia familiar: hospitalización, accidente, hijo enfermo que requiere cuidado.
-- Catástrofe natural o fuerza mayor.
+- Emergencia o cuidado familiar: hospitalización, accidente, hijo enfermo que requiere cuidado,
+  visita al médico o a urgencias con un hijo que se lleva el día.
+- Gimnasio cerrado sin aviso, corte de luz, paro, catástrofe o fuerza mayor en un día habitual.
+- Noche sin dormir por un hijo enfermo o una emergencia (no por salir de fiesta).
 
 RECHAZA:
-- "No tuve tiempo" / "estuve ocupado" / trabajo excesivo — 30 minutos siempre hay.
+- "No tuve tiempo" / "estuve ocupado" / mucho trabajo, sin un hecho concreto e imprevisto.
 - Flojera, cansancio, falta de motivación — eso es precisamente lo que el reto combate.
-- Clima — se puede entrenar adentro.
-- Relatos vagos, sin fechas ni detalles ("me sentí mal toda la semana").
+- Clima común (lluvia, frío).
+- Relatos vagos, sin días ni detalles ("me sentí mal toda la semana").
 - Un viaje o compromiso previsible que NO fue congelado (el contexto muestra 0 sesiones congeladas)
   y que recién ahora se quiere justificar.
 
@@ -839,10 +862,12 @@ EVIDENCIA (aquí se falla seguido — lee con cuidado):
 - Si adjunta una imagen, evalúala como evidencia.
 
 El género de la persona va indicado en el contexto: respétalo al conjugar (para una mujer,
-"estuviste enferma", no "enfermo").
+"estuviste enferma", no "enfermo"). Habla de tú, en español neutro de Chile (nunca "vos").
 
 Responde SOLO con un JSON válido (sin markdown, sin backticks):
-{"valid": true/false, "reason": "explicación breve en español de máximo 2 frases"}`
+{"valid": true/false, "sessionsAccepted": N, "reason": "explicación breve en español de máximo 2 frases"}
+- sessionsAccepted: cuántas de las sesiones pedidas justificas (entero entre 0 y las pedidas).
+- valid es true si sessionsAccepted es 1 o más.`
 
 const WEEKDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
 
@@ -859,10 +884,61 @@ function shortDate(date) {
   return `${WEEKDAYS[d.getDay()]} ${dd}-${mm}`
 }
 
+/** 'YYYY-MM-DD' → JS weekday (0 = Sunday), or null. */
+function weekdayOf(dateStr) {
+  if (typeof dateStr !== 'string') return null
+  const [y, m, d] = dateStr.slice(0, 10).split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  return Number.isNaN(dt.getTime()) ? null : dt.getDay()
+}
+
+// Monday-first weekday order for human-readable lists.
+const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0]
+const HABIT_WEEKS = 8
+
+/**
+ * The user's real training calendar: on which weekdays they logged sessions
+ * over the previous HABIT_WEEKS weeks. Weeks with no sessions at all (frozen,
+ * sick) are left out of the denominator so a vacation doesn't blur the pattern.
+ *
+ * Returns null without enough history.
+ */
+async function trainingHabits(userId, weekId) {
+  const weeks = []
+  let cursor = getPreviousWeekId(weekId)
+  for (let i = 0; i < HABIT_WEEKS; i++) {
+    weeks.push(cursor)
+    cursor = getPreviousWeekId(cursor)
+  }
+  const snap = await db.collection('workouts')
+    .where('userId', '==', userId)
+    .where('weekId', 'in', weeks)
+    .get()
+
+  const daysByWeek = {} // weekId → Set<weekday>
+  for (const d of snap.docs) {
+    const w = d.data()
+    const dow = weekdayOf(w.date)
+    if (dow == null) continue
+    ;(daysByWeek[w.weekId] ??= new Set()).add(dow)
+  }
+  const weeksWithSessions = Object.keys(daysByWeek).length
+  if (weeksWithSessions === 0) return null
+
+  const counts = Array(7).fill(0)
+  for (const set of Object.values(daysByWeek)) for (const dow of set) counts[dow]++
+  const habitual = WEEKDAY_ORDER
+    .filter((dow) => counts[dow] >= 2)
+    .map((dow) => `${WEEKDAYS[dow]} ${counts[dow]}/${weeksWithSessions}`)
+  return { habitual, weeksWithSessions, avgPerWeek: snap.size / weeksWithSessions }
+}
+
 /**
  * Week facts the judge needs to tell a legitimate PARTIAL freeze apart from
- * someone who never froze anything. Read server-side from Firestore, so the
- * client can't inflate it.
+ * someone who never froze anything, and to judge realistically: which days
+ * this person actually trains on, which days of the week already have a
+ * session, and which don't. Read server-side from Firestore, so the client
+ * can't inflate it.
  *
  * Returns null when the caller didn't send userId/weekId (older clients) —
  * the judge then falls back to reading the text alone.
@@ -870,10 +946,14 @@ function shortDate(date) {
 async function buildWeekContext(userId, weekId, sessionsJustified) {
   if (!userId || !weekId) return null
 
-  const [userSnap, absences, workoutSnap] = await Promise.all([
+  const [userSnap, absences, workoutSnap, habits] = await Promise.all([
     db.collection('users').doc(userId).get(),
     getAllAbsences(),
     db.collection('workouts').where('userId', '==', userId).where('weekId', '==', weekId).get(),
+    trainingHabits(userId, weekId).catch((err) => {
+      console.warn('trainingHabits failed:', err.message)
+      return null
+    }),
   ])
 
   const name = userSnap.exists ? userSnap.data().name || userId : userId
@@ -891,6 +971,16 @@ async function buildWeekContext(userId, weekId, sessionsJustified) {
     `- Semana evaluada: ${weekId} (${shortDate(start)} a ${shortDate(end)}). Hoy es ${shortDate(new Date())}.`,
     `- Meta base: 3 sesiones${recoverySessions > 0 ? ` + ${recoverySessions} de recuperación` : ''}`,
   ]
+
+  if (habits) {
+    lines.push(
+      `- Días HABITUALES de entrenamiento (últimas ${HABIT_WEEKS} semanas, ${habits.weeksWithSessions} con sesiones): ` +
+      `${habits.habitual.length ? habits.habitual.join(', ') : 'sin patrón claro'}. ` +
+      `Promedio ${habits.avgPerWeek.toFixed(1)} sesiones por semana. Este es su calendario real.`
+    )
+  } else {
+    lines.push('- Días habituales de entrenamiento: sin historial suficiente.')
+  }
 
   if (frozenSessions > 0) {
     const covering = absences
@@ -914,6 +1004,12 @@ async function buildWeekContext(userId, weekId, sessionsJustified) {
   lines.push(
     `- Sesiones registradas: ${workoutDates.length}` +
     (workoutDates.length ? ` (${workoutDates.map(shortDate).join(', ')})` : '')
+  )
+  const doneDays = new Set(workoutDates.map(weekdayOf))
+  const missingDays = WEEKDAY_ORDER.filter((dow) => !doneDays.has(dow)).map((dow) => WEEKDAYS[dow])
+  lines.push(
+    `- Días de esta semana SIN sesión registrada: ${missingDays.join(', ') || 'ninguno'}` +
+    (new Date() <= end ? ' (la semana sigue en curso: los días futuros aún pueden usarse)' : '')
   )
   if (typeof sessionsJustified === 'number' && sessionsJustified > 0) {
     lines.push(`- Sesiones que pide justificar: ${sessionsJustified}`)
@@ -980,7 +1076,23 @@ export const evaluateJustification = onCall(
       }
 
       const result = JSON.parse(jsonMatch[0])
-      return { valid: Boolean(result.valid), reason: result.reason || 'Sin explicación.' }
+
+      // Partial acceptance: the judge may grant fewer sessions than requested.
+      // Clamp to [0, requested]; an explicit "valid: false" always means 0.
+      const requested = Number.isInteger(sessionsJustified) && sessionsJustified > 0
+        ? sessionsJustified
+        : null
+      let sessionsAccepted = Number.isInteger(result.sessionsAccepted)
+        ? result.sessionsAccepted
+        : (result.valid ? (requested ?? 1) : 0)
+      if (result.valid === false) sessionsAccepted = 0
+      if (requested != null) sessionsAccepted = Math.max(0, Math.min(requested, sessionsAccepted))
+
+      return {
+        valid: sessionsAccepted > 0,
+        sessionsAccepted,
+        reason: result.reason || 'Sin explicación.',
+      }
     } catch (err) {
       console.error('AI Judge (gpt-5.6-luna) error:', err)
       return {

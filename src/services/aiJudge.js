@@ -39,8 +39,18 @@ export async function evaluateExcuse(excuse, photoBase64 = null, context = {}) {
       sessionsJustified: context.sessionsJustified ?? null,
     })
 
+    const requested = Number.isInteger(context.sessionsJustified) ? context.sessionsJustified : null
+    const valid = Boolean(data.valid)
+    // Partial acceptance: the judge may grant fewer sessions than requested.
+    // Older function builds don't send sessionsAccepted → all-or-nothing.
+    let sessionsAccepted = Number.isInteger(data.sessionsAccepted)
+      ? data.sessionsAccepted
+      : (valid ? (requested ?? 1) : 0)
+    if (requested != null) sessionsAccepted = Math.max(0, Math.min(requested, sessionsAccepted))
+
     return {
-      valid: Boolean(data.valid),
+      valid,
+      sessionsAccepted,
       reason: data.reason || 'Sin explicación.',
       ...(data.aiError ? { aiError: true } : {}),
     }

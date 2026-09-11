@@ -80,9 +80,10 @@ const sections = [
     color: 'orange',
     items: [
       'Cuando congelas, generas una "deuda" igual al total de sesiones congeladas.',
-      'Tienes ±4 semanas activas (no congeladas) alrededor del rango congelado para pagar la deuda con sesiones extra (por encima de la meta semanal). Si hay un segundo congelamiento, esas semanas no cuentan para las 4.',
-      'Las sesiones extra dentro de la ventana se aplican automáticamente a la deuda; no necesitas elegir cuándo recuperarlas.',
-      'Las sesiones que se usan para pagar deuda NO cuentan para la vida extra (umbral de 5 sesiones).',
+      'Tienes ±4 semanas activas (no congeladas) alrededor del rango congelado para pagar la deuda con sesiones extra. Si hay un segundo congelamiento, esas semanas no cuentan para las 4.',
+      `Una sesión es "extra" cuando supera lo que esa semana te exigía: la meta (${WEEKLY_GOAL}) menos las sesiones congeladas. Si congelas 1 y de todas formas haces ${WEEKLY_GOAL}, esa última sesión paga tu propio congelamiento. Congelar y entrenar igual nunca te deja deuda.`,
+      'Los extras pagan primero el congelamiento más antiguo. En Administración ves cada congelamiento con su deuda, lo pagado, con qué semanas se pagó y hasta cuándo tienes plazo.',
+      'Las sesiones que se usan para pagar deuda NO cuentan para la vida extra ni para el banco de extras (no se cuentan dos veces).',
       'La racha y el escudo siguen subiendo normal mientras cumplas la meta de cada semana.',
       'Si al cerrar la ventana queda deuda, se aplica una multa proporcional al nivel actual del usuario y la(s) semana(s) congelada(s) pasan a estado "multada".',
     ],
@@ -92,12 +93,12 @@ const sections = [
     title: 'Juez IA (justificación por sesión)',
     color: 'purple',
     items: [
-      'Si no puedes cumplir por un imprevisto (enfermedad súbita, emergencia familiar, etc.), puedes presentar una justificación.',
-      `Indicas cuántas sesiones quieres justificar (1, 2 o ${WEEKLY_GOAL}).`,
-      `Si justificas menos del total, debes completar las restantes para evitar la multa. Ej: hiciste 1, justificas 1 → debes completar la última.`,
-      'La IA evalúa tu excusa de forma estricta e imparcial.',
-      'Solo se aceptan situaciones genuinamente imprevistas — con evidencia (foto, certificado médico).',
-      '"No tuve tiempo", viajes planificados o cansancio NO son aceptados.',
+      'Si no puedes cumplir por un imprevisto (enfermedad súbita, emergencia familiar, gimnasio cerrado sin aviso, etc.), puedes presentar una justificación.',
+      `Indicas cuántas sesiones quieres justificar (1, 2 o ${WEEKLY_GOAL}). El Juez puede aceptar menos de las pedidas y te explica por qué.`,
+      `Si te justifican menos del total, debes completar las restantes para evitar la multa. Ej: hiciste 1, te justifican 1 → debes completar la última.`,
+      'El Juez es realista: sabe que nadie entrena "cualquier día". Conoce tus días habituales de las últimas 8 semanas, y una sesión perdida por imprevisto en un día habitual se considera perdida. No te va a decir "podías entrenar en casa" ni "podías ir otro día".',
+      'Cuenta qué pasó, qué días y a qué sesiones afectó. Un relato específico vale más que un certificado; la evidencia suma pero no es obligatoria.',
+      '"No tuve tiempo", viajes planificados (para eso está congelar) o cansancio NO son aceptados.',
     ],
   },
   {
@@ -132,6 +133,20 @@ const colorMap = {
 //   - Patch (vX.Y.Z): bugfixes, ajustes menores.
 // Más reciente primero.
 const CHANGELOG = [
+  {
+    version: 'v1.8.0',
+    date: '2026-09-07',
+    type: 'minor',
+    title: 'Recuperación justa en semanas parciales y Juez IA realista',
+    items: [
+      `Recuperación: los extras ahora se cuentan sobre lo que la semana realmente exigía (meta menos sesiones congeladas). Si congelas 1 sesión y de todas formas haces ${WEEKLY_GOAL}, esa sesión paga tu propio congelamiento. Antes esa sesión no contaba y la deuda quedaba igual.`,
+      'Lo mismo aplica al banco de extras y a la vida extra: 5 sesiones en una semana con 1 congelada valen lo mismo que 5 sesiones en una semana normal.',
+      'Cada congelamiento muestra su propio estado en Administración: deuda, sesiones pagadas, con qué semanas se pagó y hasta cuándo tienes plazo. Los extras pagan primero el congelamiento más antiguo.',
+      'Juez IA realista: entiende que nadie entrena "cualquier día". Ve tus días habituales de las últimas 8 semanas; una sesión perdida por imprevisto en un día habitual se considera perdida, y ya no rechaza con "podías entrenar en casa" o "podías ir otro día". El gimnasio cerrado sin aviso cuenta como imprevisto.',
+      'El Juez puede aceptar parcialmente (por ejemplo, 1 de 2 sesiones) y explica qué parte quedó fuera.',
+      'Corrección retroactiva del cierre de la W36 con la regla nueva: la 4ª sesión de Gonza en la W35 (con 1 congelada) ahora vale 2 extras, y su multa por la W29 baja de $3.333 a $1.667.',
+    ],
+  },
   {
     version: 'v1.7.0',
     date: '2026-06-10',

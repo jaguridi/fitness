@@ -219,15 +219,18 @@ export default function useGameLogic() {
     setTotalPot(total)
   }, [users])
 
-  // ── Fetch past-week session counts inside active recovery windows ──
+  // ── Fetch past-week session counts inside recovery windows ──────────
   // The current week is excluded here (it comes from the live `workouts`
   // subscription). Re-runs whenever absences change so newly-created or
-  // edited absences pull in any historical sessions they need.
+  // edited absences pull in any historical sessions they need. CLOSED absences
+  // are included too: they keep their claim on the extras they consumed, and
+  // without their weeks loaded they would look unpaid and steal extras from a
+  // live absence in the simulation.
   useEffect(() => {
     let cancelled = false
     const weeksNeeded = new Set()
     for (const a of absences) {
-      if (isLegacyAbsence(a) || a.status === 'closed') continue
+      if (isLegacyAbsence(a) || !a.frozenWeeks) continue
       for (const wk of getAbsenceRecoveryWindow(a, absences)) {
         if (wk !== currentWeekId) weeksNeeded.add(wk)
       }
@@ -312,7 +315,9 @@ export default function useGameLogic() {
         computeWeekRequirements(userId, currentWeekId, absences)
       const regularSessions = Math.min(sessions, WEEKLY_GOAL)
       const debtConsumedThisWeek = liveRecovery.debtConsumedByUserWeek[userId]?.[currentWeekId] || 0
-      const bonusSessions = Math.max(0, sessions - WEEKLY_GOAL - recoverySessions - debtConsumedThisWeek)
+      // Extras are counted above what THIS week requires (goal − frozen), minus
+      // what recovery debt already consumed — same arithmetic as the close.
+      const bonusSessions = Math.max(0, sessions - totalRequired - debtConsumedThisWeek)
 
       // Outstanding debt across all active new-format absences for this user.
       const remainingDebt = absences
@@ -354,10 +359,12 @@ export default function useGameLogic() {
         partiallyFrozen: !fullyFrozen && frozenSessions > 0,
         goalMet,
         progress: totalRequired > 0 ? Math.min(1, sessions / totalRequired) : 1,
-        // Extras consumed by debt repayment don't count toward the extra life.
+        // Extras consumed by debt repayment don't count toward the extra life;
+        // frozen sessions are added back because the extras that repaid them
+        // are already inside debtConsumedThisWeek (mirrors weekEnd.js).
         canEarnLife:
           !fullyFrozen &&
-          sessions - debtConsumedThisWeek >= EXTRA_LIFE_THRESHOLD + recoverySessions,
+          sessions + frozenSessions - debtConsumedThisWeek >= EXTRA_LIFE_THRESHOLD + recoverySessions,
         inRecoveryWindow,
         debtConsumedThisWeek,
         remainingDebt,
@@ -388,6 +395,9 @@ export default function useGameLogic() {
     workouts,
     summaries,
     absences,
+    // Per-absence recovery ledger (debt consumed per week, remaining debt) so
+    // the planner can show each freeze's own progress and deadline.
+    liveRecovery,
     loading,
     error,
     totalPot,

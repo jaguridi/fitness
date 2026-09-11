@@ -80,26 +80,31 @@ export function computeWeekEndOutcome({
     const { recoverySessions, frozenSessions, totalRequired, fullyFrozen } =
       computeWeekRequirements(uid, weekId, absences)
 
+    const sessions = weekWorkouts.filter((w) => w.userId === uid).length
+    const debtConsumed = debtConsumedByUserWeek[uid]?.[weekId] || 0
+
     if (fullyFrozen) {
+      // Nothing is required, so the week is neutral for fines, streak, lives and
+      // the bank. Sessions logged anyway are still recorded and, via the
+      // simulation, repay this very freeze (debtConsumed) — training through a
+      // frozen week must never leave the user worse off than not freezing.
       summaries.push({
         userId: uid,
         weekId,
         data: {
           status: 'frozen',
-          sessions: 0,
+          sessions,
           totalRequired: 0,
           recoverySessions,
           frozenSessions,
           fineApplied: 0,
           lifeUsed: false,
           lifeEarned: false,
+          debtConsumed,
         },
       })
       continue
     }
-
-    const sessions = weekWorkouts.filter((w) => w.userId === uid).length
-    const debtConsumed = debtConsumedByUserWeek[uid]?.[weekId] || 0
 
     let fineApplied = 0
     let lifeUsed = false
@@ -127,7 +132,10 @@ export function computeWeekEndOutcome({
         shieldEarned = true
       }
       // Extras consumed by an absence's debt don't count toward extra life.
-      const regularPlusBonus = sessions - recoverySessions - debtConsumed
+      // Frozen sessions are added back because the extras that repaid them are
+      // already inside debtConsumed — otherwise freezing 1 and then doing 5
+      // would lose the life that 5 sessions in a normal week earn.
+      const regularPlusBonus = sessions + frozenSessions - recoverySessions - debtConsumed
       if (regularPlusBonus >= EXTRA_LIFE_THRESHOLD) {
         lifeEarned = true
         newLives += 1
@@ -161,11 +169,12 @@ export function computeWeekEndOutcome({
     }
 
     // ── Extras banking + auto-redemption ──────────────────────────────
-    // Bankable extras: sessions above WEEKLY_GOAL that weren't consumed by
-    // frozen-week debt. Only earned on weeks the goal was met outright (no
-    // extras when a fine was applied or justifications/lives covered a miss).
+    // Bankable extras: sessions above what the week REQUIRED (goal + legacy
+    // recovery − frozen) that weren't consumed by recovery debt. Only earned on
+    // weeks the goal was met outright (no extras when a fine was applied or
+    // justifications/lives covered a miss).
     const weekExtras = (deficit <= 0)
-      ? Math.max(0, (sessions - recoverySessions - debtConsumed) - WEEKLY_GOAL)
+      ? Math.max(0, sessions - totalRequired - debtConsumed)
       : 0
 
     let walletBalance = (user.walletBalance || 0) + fineApplied
@@ -307,12 +316,15 @@ export function computeWeekEndOutcome({
 /**
  * Weeks whose session counts the auto-recovery simulation needs in order to
  * close `weekId`: the week itself plus every recovery-window week up to and
- * including it, across all active new-format absences.
+ * including it, across ALL new-format absences — closed ones too. A closed
+ * absence still holds its claim on the extras it consumed (see
+ * simulateAutoRecovery); if its window weeks weren't loaded it would look
+ * unpaid and grab extras from a shared week that a live absence really earned.
  */
 export function getSimulationWeeks(weekId, absences) {
   const simWeeks = new Set([weekId])
   for (const a of absences) {
-    if (isLegacyAbsence(a) || a.status === 'closed') continue
+    if (isLegacyAbsence(a) || !a.frozenWeeks) continue
     for (const w of getAbsenceRecoveryWindow(a, absences)) {
       if (w <= weekId) simWeeks.add(w)
     }

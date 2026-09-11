@@ -89,11 +89,17 @@ export default function JustificationModal({ weekId, existing = null, onClose, o
         evidencePhotoURL = await uploadJustificationPhoto(photo, currentUser.id, weekId)
       }
 
-      // Determine save fields based on whether AI succeeded or failed
+      // Determine save fields based on whether AI succeeded or failed.
+      // The judge can accept PART of what was asked: sessionsJustified (what the
+      // close counts) becomes the granted amount; sessionsRequested keeps the ask.
       const isAiError = aiResult.aiError === true
+      const granted = !isAiError && aiResult.valid && Number.isInteger(aiResult.sessionsAccepted)
+        ? Math.min(sessionsJustified, Math.max(1, aiResult.sessionsAccepted))
+        : sessionsJustified
       const justificationData = {
         excuse: excuse.trim(),
-        sessionsJustified,
+        sessionsJustified: granted,
+        sessionsRequested: sessionsJustified,
         evidencePhotoURL,
         aiVerdict: isAiError ? null : aiResult.valid,
         aiReason: aiResult.reason,
@@ -162,7 +168,7 @@ export default function JustificationModal({ weekId, existing = null, onClose, o
             <p className="text-amber-400 text-xs">
               {isAppeal
                 ? 'Corrige tu justificación, agrega más detalles o mejor evidencia. La IA volverá a evaluar.'
-                : 'Enfermedad súbita, lesión, emergencia. Si era previsible (viaje, vacaciones), usa la semana congelada — el Juez ve tus congelamientos, incluso parciales. La evidencia suma, pero no es obligatoria: si es algo por lo que nadie va al médico, basta con contar bien qué pasó y desde cuándo.'}
+                : 'Enfermedad súbita, lesión, emergencia familiar, gimnasio cerrado sin aviso. Si era previsible (viaje, vacaciones), usa la semana congelada — el Juez ve tus congelamientos, incluso parciales. Cuenta qué pasó, qué días y qué sesiones te quitó: el Juez conoce tus días habituales de entrenamiento y sabe que no se puede "ir otro día" así nomás. La evidencia suma, pero no es obligatoria.'}
             </p>
           </div>
 
@@ -213,7 +219,7 @@ export default function JustificationModal({ weekId, existing = null, onClose, o
                 <textarea
                   value={excuse}
                   onChange={(e) => setExcuse(e.target.value)}
-                  placeholder="Ejemplo: El miércoles me contagié el virus estomacal de mi hijo. Estuve con vómitos y diarrea hasta el sábado; llamé al doctor y me dijo que no fuera."
+                  placeholder="Ejemplo: Entreno lunes, martes y miércoles. El lunes el gimnasio cerró sin aviso, así que iba a ir el jueves; el jueves amanecí con gripe y estuve en cama hasta el domingo. Alcancé a hacer solo la del miércoles."
                   rows={3}
                   className="w-full bg-gray-700 border border-gray-600 rounded-xl px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none"
                 />
@@ -292,11 +298,22 @@ export default function JustificationModal({ weekId, existing = null, onClose, o
                 }`}>
                   {verdict.aiError
                     ? 'Enviada a Votación Familiar'
-                    : verdict.valid ? 'Justificación Aceptada' : 'Justificación Rechazada'}
+                    : !verdict.valid
+                    ? 'Justificación Rechazada'
+                    : Number.isInteger(verdict.sessionsAccepted) && verdict.sessionsAccepted < sessionsJustified
+                    ? 'Aceptada Parcialmente'
+                    : 'Justificación Aceptada'}
                 </h3>
                 <p className="text-gray-300 text-sm mt-2">
                   {verdict.reason}
                 </p>
+                {!verdict.aiError && verdict.valid &&
+                  Number.isInteger(verdict.sessionsAccepted) && verdict.sessionsAccepted < sessionsJustified && (
+                  <p className="text-amber-300 text-xs mt-2 font-semibold">
+                    El Juez aceptó {verdict.sessionsAccepted} de {sessionsJustified} sesiones. Las otras{' '}
+                    {sessionsJustified - verdict.sessionsAccepted} siguen exigibles: complétalas para evitar la multa.
+                  </p>
+                )}
                 {verdict.aiError && (
                   <p className="text-amber-400/70 text-xs mt-2">
                     Los demás miembros de la familia votarán si aprueban o rechazan tu justificación.

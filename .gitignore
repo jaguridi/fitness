@@ -48,3 +48,6 @@ vite.config.js.timestamp-*
 
 # PWA dev artifacts
 dev-dist
+
+# Firestore snapshots taken before one-off ledger corrections (raw production docs)
+scripts/dev-only/backups/

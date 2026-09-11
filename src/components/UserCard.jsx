@@ -153,7 +153,7 @@ export default function UserCard({ status, justification }) {
           </div>
           <p className="text-[11px] text-gray-500 leading-tight">
             {debtConsumedThisWeek > 0 && `Pagaste ${debtConsumedThisWeek} esta semana. `}
-            Cada sesión sobre la meta semanal dentro del rango ±4 semanas activas baja la deuda.
+            Cada sesión sobre lo exigible de la semana ({totalRequired}) baja la deuda; el detalle por congelamiento está en Administración.
           </p>
         </div>
       )}

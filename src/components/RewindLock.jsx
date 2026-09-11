@@ -71,6 +71,12 @@ export default function RewindLock({ currentWeekId }) {
         Rebobina el lock de cierre automático para que la app reprocese semanas
         pasadas y reaplique multas perdidas. La app se recargará al confirmar.
       </p>
+      <div className="bg-red-900/20 border border-red-700/30 rounded-xl p-2 mb-3 text-xs text-red-300">
+        ⚠️ Solo para semanas que NUNCA se cerraron. Reprocesar una semana ya cerrada vuelve a
+        sumar sus multas a la billetera (el cierre no descuenta lo ya cobrado) y sobreescribe el
+        historial. Para recalcular con reglas nuevas usa el script
+        <span className="font-mono"> scripts/dev-only/replay-ledger.mjs</span>.
+      </div>
 
       <div className="bg-gray-900/50 rounded-xl p-2 mb-3 text-xs">
         <span className="text-gray-400">Lock actual: </span>

@@ -5,7 +5,7 @@ import RewindLock from '../components/RewindLock'
 import AchievementBackfill from '../components/AchievementBackfill'
 
 export default function Admin({ gameState }) {
-  const { processWeekEnd, currentWeekId, absences, refreshAbsences } = gameState
+  const { processWeekEnd, currentWeekId, absences, refreshAbsences, liveRecovery } = gameState
 
   return (
     <div className="space-y-4 pb-24">
@@ -18,7 +18,7 @@ export default function Admin({ gameState }) {
 
       <RewindLock currentWeekId={currentWeekId} />
 
-      <AbsencePlanner absences={absences} onChange={refreshAbsences} />
+      <AbsencePlanner absences={absences} onChange={refreshAbsences} recovery={liveRecovery} />
 
       <WeeklyHistory />
 
