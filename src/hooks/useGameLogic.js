@@ -13,6 +13,7 @@ import {
   computeWeekRequirements,
 } from '../game/absences.js'
 import { computeWeekEndOutcome, getSimulationWeeks } from '../game/weekEnd.js'
+import { getHoliday } from '../game/holidays.js'
 import {
   getUsers,
   setUser,
@@ -325,8 +326,8 @@ export default function useGameLogic() {
         .reduce((sum, a) => sum + (liveRecovery.remainingDebtByAbsence[a.id] || 0), 0)
 
       // Active recovery weeks still ahead (this week included) before the debt's
-      // window closes. The window already excludes frozen weeks, so this counts
-      // only the real chances left to pay down the debt with extras.
+      // window closes. Holiday workouts remain usable for recovery, but an
+      // agreed holiday must not count as a week of the recovery deadline.
       const recoveryWeeksLeft = (() => {
         if (remainingDebt <= 0) return 0
         const weeks = new Set()
@@ -334,7 +335,7 @@ export default function useGameLogic() {
           if (a.userId !== userId || isLegacyAbsence(a) || a.status === 'closed') continue
           if ((liveRecovery.remainingDebtByAbsence[a.id] || 0) <= 0) continue
           for (const wk of getAbsenceRecoveryWindow(a, absences)) {
-            if (wk >= currentWeekId) weeks.add(wk)
+            if (wk >= currentWeekId && !getHoliday(wk)) weeks.add(wk)
           }
         }
         return weeks.size

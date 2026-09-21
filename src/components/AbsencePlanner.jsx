@@ -9,9 +9,9 @@ import {
   getWeekId,
   formatWeekLabel,
   getWeeksBetween,
-  getRecoveryWindow,
 } from '../hooks/useWeekId'
 import { getAbsenceRecoveryWindow } from '../game/absences.js'
+import { getHoliday } from '../game/holidays.js'
 import Avatar from './Avatar'
 import { useAuth } from '../context/AuthContext'
 import Card from './ui/Card'
@@ -93,11 +93,16 @@ export default function AbsencePlanner({ absences = [], onChange, recovery = nul
     return skip
   }, [absences, userId, editingId])
 
-  const recoveryWindow = useMemo(
-    () => (orderedStart && orderedEnd ? getRecoveryWindow(orderedStart, orderedEnd, 4, otherFrozen) : []),
-    [orderedStart, orderedEnd, otherFrozen]
+  // Preview the exact same window as the saved absence and server close,
+  // including agreed holidays and any extension already granted to this freeze.
+  const recoveryWindow = useMemo(() => {
+    if (!orderedStart || !orderedEnd) return []
+    const existing = absences.find((a) => a.id === editingId)
+    return getAbsenceRecoveryWindow({ ...existing, userId, frozenWeeks }, absences)
+  }, [orderedStart, orderedEnd, absences, editingId, userId, frozenWeeks])
+  const recoveryNonFrozen = recoveryWindow.filter((w) =>
+    !frozenWeeks[w] && !otherFrozen.has(w) && !getHoliday(w)
   )
-  const recoveryNonFrozen = recoveryWindow.filter((w) => !frozenWeeks[w])
 
   const resetForm = () => {
     setEditingId(null)
@@ -282,8 +287,11 @@ export default function AbsencePlanner({ absences = [], onChange, recovery = nul
               {recoveryNonFrozen.length > 0 && (
                 <>
                   {' '}Tendrás {recoveryNonFrozen.length} semana(s) de recuperación automática
-                  alrededor del rango (±4 semanas activas) para hacer sesiones extra y pagar la deuda.
+                  alrededor del rango, incluidas las prórrogas vigentes, para hacer sesiones extra y pagar la deuda.
                 </>
+              )}
+              {recoveryWindow.some((w) => getHoliday(w)) && (
+                <> La semana de Fiestas Patrias no consume plazo; sus entrenamientos sí cuentan para recuperar.</>
               )}
             </p>
           </div>
