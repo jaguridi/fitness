@@ -20,6 +20,7 @@ function barColor(status, lifeUsed) {
     case 'completed': return 'bg-green-500'
     case 'missed':    return 'bg-red-500'
     case 'frozen':    return 'bg-gray-500'
+    case 'holiday':   return 'bg-cyan-500'
     case 'justified': return 'bg-amber-500'
     default:          return 'bg-gray-700'
   }
@@ -30,7 +31,7 @@ function calcBestStreak(summaries) {
   const sorted = [...summaries].sort((a, b) => a.weekId.localeCompare(b.weekId))
   for (const s of sorted) {
     if (s.status === 'completed' || s.lifeUsed) { cur++; best = Math.max(best, cur) }
-    else if (s.status !== 'frozen') cur = 0
+    else if (!['frozen', 'holiday'].includes(s.status)) cur = 0
   }
   return best
 }
@@ -73,8 +74,8 @@ export default function Stats({ gameState }) {
     const wks = allWorkouts[u.id] || []
     const firestoreUser = users.find((fu) => fu.id === u.id) || {}
     const userConst = USERS.find((c) => c.id === u.id)
-    // Frozen weeks don't count toward compliance
-    const scorable = sums.filter((s) => s.status !== 'frozen')
+    // Frozen weeks and agreed holidays don't count toward compliance.
+    const scorable = sums.filter((s) => !['frozen', 'holiday'].includes(s.status))
     const completed = scorable.filter((s) => s.status === 'completed' || s.lifeUsed).length
     const total = scorable.length
     const rate = total > 0 ? Math.round((completed / total) * 100) : 0

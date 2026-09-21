@@ -37,6 +37,7 @@ import {
 } from './game/absences.js'
 import { computeWeekEndOutcome, getSimulationWeeks } from './game/weekEnd.js'
 import { USER_IDS, USER_GENDER } from './game/constants.js'
+import { getHoliday } from './game/holidays.js'
 
 // Spanish gendered word by user: pick(userId, femaleForm, maleForm).
 const gword = (userId, female, male) => (USER_GENDER[userId] === 'f' ? female : male)
@@ -334,7 +335,11 @@ async function sendWeekCloseResults(weekId) {
 
     let title = '📋 Cierre de semana'
     let body = ''
-    if (s.status === 'frozen') {
+    if (s.status === 'holiday') {
+      title = '🇨🇱 ¡Felices Fiestas Patrias!'
+      body = 'Semana libre y sin multas. ¡Gracias por celebrar en familia!'
+      if (s.debtConsumed > 0) body += ` Recuperaste ${s.debtConsumed} sesión(es). 💪`
+    } else if (s.status === 'frozen') {
       title = '🧊 Semana congelada'
       body = 'Semana congelada — sin cambios para ti.'
     } else if (s.status === 'missed') {
@@ -544,6 +549,15 @@ export const generateWeeklyRecap = onCall(
     const { weekId } = request.data
     if (!weekId) throw new HttpsError('invalid-argument', 'weekId is required.')
 
+    // Family-approved holiday copy must replace any earlier ordinary recap.
+    const holiday = getHoliday(weekId)
+    if (holiday) {
+      const recapData = { weekId, recap: holiday.recap, holidayName: holiday.name,
+        revision: holiday.revision, createdAt: new Date() }
+      await db.collection('weekly_recaps').doc(weekId).set(recapData, { merge: true })
+      return recapData
+    }
+
     // Check if recap already exists
     const existingRecap = await db.collection('weekly_recaps').doc(weekId).get()
     if (existingRecap.exists) {
@@ -569,7 +583,7 @@ export const generateWeeklyRecap = onCall(
         name: usersMap[data.userId] || data.userId,
         gender: genderLabel(data.userId),
         sessions: data.sessions || 0,
-        totalRequired: data.totalRequired || 3,
+        totalRequired: data.totalRequired ?? 3,
         status: data.status,
         fineApplied: data.fineApplied || 0,
         lifeUsed: data.lifeUsed || false,
@@ -695,6 +709,7 @@ export const generateMonthlyRecap = onCall(
           weeksMissed: 0,
           weeksJustified: 0,
           weeksFrozen: 0,
+          weeksHoliday: 0,
           finesPaid: 0,
           minutes: 0,
           calories: 0,
@@ -707,6 +722,7 @@ export const generateMonthlyRecap = onCall(
       else if (s.status === 'missed') u.weeksMissed++
       else if (s.status === 'justified') u.weeksJustified++
       else if (s.status === 'frozen') u.weeksFrozen++
+      else if (s.status === 'holiday') u.weeksHoliday++
     }
     for (const w of monthWorkouts) {
       const u = perUser[w.userId]
@@ -723,6 +739,7 @@ export const generateMonthlyRecap = onCall(
       if (u.weeksMissed > 0) parts.push(`${u.weeksMissed} fallidas`)
       if (u.weeksJustified > 0) parts.push(`${u.weeksJustified} justificadas`)
       if (u.weeksFrozen > 0) parts.push(`${u.weeksFrozen} congeladas`)
+      if (u.weeksHoliday > 0) parts.push(`${u.weeksHoliday} libres por Fiestas Patrias (sin obligación ni multa)`)
       if (u.finesPaid > 0) parts.push(`multas=$${u.finesPaid}`)
       if (u.calories > 0) parts.push(`${u.calories} kcal`)
       return parts.join(', ')

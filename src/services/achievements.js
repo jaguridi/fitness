@@ -343,7 +343,7 @@ function getBestStreak(summaries) {
     if (s.status === 'completed' || s.lifeUsed) {
       cur++
       best = Math.max(best, cur)
-    } else if (s.status !== 'frozen') {
+    } else if (!['frozen', 'holiday'].includes(s.status)) {
       cur = 0
     }
   }

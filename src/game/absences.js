@@ -26,6 +26,7 @@
 
 import { WEEKLY_GOAL } from './constants.js'
 import { getRecoveryWindow } from './weekId.js'
+import { HOLIDAY_WEEKS, getHoliday } from './holidays.js'
 
 export function isLegacyAbsence(a) {
   return typeof a.frozenWeekId === 'string'
@@ -99,6 +100,12 @@ export function getAbsenceRecoveryWindow(a, allAbsences = null) {
   const range = getAbsenceRange(a)
   if (!range) return []
   const { full, partial } = otherFrozenWeeks(a, allAbsences)
+  // An agreed holiday is an optional recovery opportunity, but does not use
+  // up one of the active weeks available to repay an absence.
+  for (const wk of Object.keys(HOLIDAY_WEEKS)) {
+    full.delete(wk)
+    partial.add(wk)
+  }
   return getRecoveryWindow(
     range.startWeekId, range.endWeekId, RECOVERY_PADDING, full,
     RECOVERY_PADDING + extraRecoveryWeeks(a), partial
@@ -128,6 +135,7 @@ function legacyRecoverySessions(userId, weekId, absences) {
  * UI can't drift apart.
  */
 export function requiredSessionsForWeek(userId, weekId, absences, frozenTotals = null) {
+  if (getHoliday(weekId)) return 0
   const frozen = frozenTotals
     ? (frozenTotals[weekId] || 0)
     : (frozenTotalsByWeek(userId, absences)[weekId] || 0)
@@ -232,6 +240,11 @@ export function computeWeekRequirements(userId, weekId, absences) {
   )
 
   const baseGoal = WEEKLY_GOAL + recoverySessions
+  const holiday = getHoliday(weekId)
+  if (holiday) {
+    return { recoverySessions: 0, frozenSessions: 0, totalRequired: 0,
+      fullyFrozen: true, inRecoveryWindow, holiday: holiday.name }
+  }
   const fullyFrozen = frozenSessions >= baseGoal
   const totalRequired = Math.max(0, baseGoal - frozenSessions)
 

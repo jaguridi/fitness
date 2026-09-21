@@ -19,6 +19,22 @@ import {
   computeWeekRequirements,
   computeSessionsJustified,
 } from './absences.js'
+import { getHoliday } from './holidays.js'
+
+function bankExtras(user, weekExtras, fineApplied = 0) {
+  let walletBalance = (user.walletBalance || 0) + fineApplied
+  let bankedExtras = (user.bankedExtras || 0) + weekExtras
+  let extrasRedeemed = 0
+  let fineReducedByCanje = 0
+  while (bankedExtras >= EXTRAS_PER_FINE_REDEMPTION && walletBalance > 0) {
+    const reduction = Math.min(FINE_REDEMPTION_AMOUNT, walletBalance)
+    walletBalance -= reduction
+    bankedExtras -= EXTRAS_PER_FINE_REDEMPTION
+    extrasRedeemed += 1
+    fineReducedByCanje += reduction
+  }
+  return { walletBalance, bankedExtras, extrasRedeemed, fineReducedByCanje }
+}
 
 /**
  * Compute everything the week-end close must write, without writing it.
@@ -79,6 +95,25 @@ export function computeWeekEndOutcome({
 
     const sessions = weekWorkouts.filter((w) => w.userId === uid).length
     const debtConsumed = debtConsumedByUserWeek[uid]?.[weekId] || 0
+
+    const holiday = getHoliday(weekId)
+    if (holiday) {
+      const extrasBanked = Math.max(0, sessions - debtConsumed)
+      const { walletBalance, bankedExtras, extrasRedeemed, fineReducedByCanje } =
+        bankExtras(user, extrasBanked)
+      const data = { walletBalance, bankedExtras }
+      userStateById[uid] = { ...user, ...data }
+      userUpdates.push({ userId: uid, data })
+      summaries.push({ userId: uid, weekId, data: {
+        status: 'holiday', holidayName: holiday.name, sessions,
+        totalRequired: 0, recoverySessions: 0, frozenSessions: 0,
+        sessionsJustified: 0, fineApplied: 0, lifeUsed: false, lifeEarned: false,
+        shieldEarned: false, shieldBroken: false, deficit: 0, effectiveDeficit: 0,
+        debtConsumed, extrasBanked, extrasRedeemed, fineReducedByCanje,
+        bankedExtrasAfter: bankedExtras,
+      } })
+      continue
+    }
 
     if (fullyFrozen) {
       // Nothing is required, so the week is neutral for fines, streak, lives and
@@ -174,18 +209,8 @@ export function computeWeekEndOutcome({
       ? Math.max(0, sessions - totalRequired - debtConsumed)
       : 0
 
-    let walletBalance = (user.walletBalance || 0) + fineApplied
-    let bankedExtras = (user.bankedExtras || 0) + weekExtras
-
-    let extrasRedeemed = 0
-    let fineReducedByCanje = 0
-    while (bankedExtras >= EXTRAS_PER_FINE_REDEMPTION && walletBalance > 0) {
-      const reduction = Math.min(FINE_REDEMPTION_AMOUNT, walletBalance)
-      walletBalance -= reduction
-      bankedExtras -= EXTRAS_PER_FINE_REDEMPTION
-      extrasRedeemed += 1
-      fineReducedByCanje += reduction
-    }
+    const { walletBalance, bankedExtras, extrasRedeemed, fineReducedByCanje } =
+      bankExtras(user, weekExtras, fineApplied)
 
     const newUserState = {
       extraLives: newLives,

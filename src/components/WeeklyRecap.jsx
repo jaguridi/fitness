@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getWeeklyRecap } from '../services/firebaseService'
 import { getPreviousWeekId } from '../hooks/useWeekId'
+import { getHoliday } from '../game/holidays'
 
 /**
  * Weekly Recap — AI-generated humorous summary of the previous week.
@@ -13,15 +14,18 @@ export default function WeeklyRecap({ currentWeekId }) {
   const [dismissed, setDismissed] = useState(false)
 
   const prevWeekId = getPreviousWeekId(currentWeekId)
+  const holiday = getHoliday(prevWeekId)
+  const dismissedKey = `recap_dismissed_${prevWeekId}${holiday ? `_${holiday.revision}` : ''}`
 
   useEffect(() => {
     // Check if user already dismissed this recap
-    const dismissedKey = `recap_dismissed_${prevWeekId}`
     if (localStorage.getItem(dismissedKey)) {
       setDismissed(true)
       return
     }
 
+    setDismissed(false)
+    setError(null)
     setLoading(true)
     getWeeklyRecap(prevWeekId)
       .then((data) => setRecap(data))
@@ -30,10 +34,10 @@ export default function WeeklyRecap({ currentWeekId }) {
         setError(true)
       })
       .finally(() => setLoading(false))
-  }, [prevWeekId])
+  }, [prevWeekId, dismissedKey])
 
   const handleDismiss = () => {
-    localStorage.setItem(`recap_dismissed_${prevWeekId}`, '1')
+    localStorage.setItem(dismissedKey, '1')
     setDismissed(true)
   }
 
@@ -68,7 +72,7 @@ export default function WeeklyRecap({ currentWeekId }) {
       <div className="flex items-center gap-2 mb-2">
         <span className="text-lg">📻</span>
         <span className="text-sm font-bold text-indigo-300">
-          Recap {recap.weekId}
+          {holiday ? '🇨🇱 ¡Felices Fiestas Patrias!' : `Recap ${recap.weekId}`}
         </span>
       </div>
       <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-line">
