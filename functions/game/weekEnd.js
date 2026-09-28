@@ -18,6 +18,7 @@ import {
   isLegacyAbsence,
   getFrozenWeeksMap,
   getAbsenceRecoveryWindow,
+  isAbsenceRecoverySuspended,
   simulateAutoRecovery,
   computeWeekRequirements,
   computeSessionsJustified,
@@ -93,11 +94,25 @@ export function computeWeekEndOutcome({
     const user = userStateById[uid]
     if (!user) continue
 
-    const { recoverySessions, frozenSessions, totalRequired, fullyFrozen } =
+    const { recoverySessions, frozenSessions, totalRequired, fullyFrozen, paused, pauseReason, bonus } =
       computeWeekRequirements(uid, weekId, absences)
 
     const sessions = weekWorkouts.filter((w) => w.userId === uid).length
     const debtConsumed = debtConsumedByUserWeek[uid]?.[weekId] || 0
+
+    if (paused) {
+      // Out of the game: no requirement, no fine, no bank movement, and every
+      // stat stays exactly as it was. Sessions are recorded but have no effect.
+      summaries.push({ userId: uid, weekId, data: {
+        status: 'paused', pauseReason, sessions,
+        totalRequired: 0, recoverySessions: 0, frozenSessions: 0,
+        sessionsJustified: 0, fineApplied: 0, lifeUsed: false, lifeEarned: false,
+        shieldEarned: false, shieldBroken: false, deficit: 0, effectiveDeficit: 0,
+        debtConsumed: 0, extrasBanked: 0, extrasRedeemed: 0, fineReducedByCanje: 0,
+        bankedExtrasAfter: user.bankedExtras || 0,
+      } })
+      continue
+    }
 
     const holiday = getHoliday(weekId)
     if (holiday) {
@@ -253,6 +268,7 @@ export function computeWeekEndOutcome({
         extrasRedeemed,
         fineReducedByCanje,
         bankedExtrasAfter: bankedExtras,
+        ...(bonus && { bonusName: bonus }),
       },
     })
   }
@@ -260,11 +276,13 @@ export function computeWeekEndOutcome({
   // ── Absence settlement ───────────────────────────────────────────
   // If any new-format absence's recovery window ends on this week and debt
   // remains, apply a proportional fine, escalate, and retroactively mark the
-  // frozen weeks as 'missed'.
+  // frozen weeks as 'missed'. A window cut short by an open-ended pause has no
+  // deadline yet, so its last week must not trigger a settlement.
   for (const a of absences) {
     if (isLegacyAbsence(a) || a.status === 'closed') continue
     const window = getAbsenceRecoveryWindow(a, absences)
     if (window.length === 0 || window[window.length - 1] !== weekId) continue
+    if (isAbsenceRecoverySuspended(a, absences)) continue
 
     const remaining = remainingDebtByAbsence[a.id] || 0
     const frozenMap = getFrozenWeeksMap(a)

@@ -109,7 +109,7 @@ function computeStats(summaries, workouts) {
     if (s.status === 'completed' || s.lifeUsed) {
       cur++
       bestStreak = Math.max(bestStreak, cur)
-    } else if (s.status !== 'frozen') {
+    } else if (!['frozen', 'holiday', 'paused'].includes(s.status)) {
       cur = 0
     }
   }

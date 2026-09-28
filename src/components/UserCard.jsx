@@ -30,7 +30,7 @@ export default function UserCard({ status, justification }) {
 
   if (!status) return null
   const {
-    userId, user, sessions, totalRequired, frozen, partiallyFrozen,
+    userId, user, sessions, totalRequired, frozen, paused, pauseReason, partiallyFrozen,
     frozenSessions, goalMet, progress, canEarnLife,
     inRecoveryWindow, remainingDebt, recoveryWeeksLeft = 0, debtConsumedThisWeek,
     bankedExtras = 0, bankedExtrasProjected = 0,
@@ -55,7 +55,15 @@ export default function UserCard({ status, justification }) {
             <AchievementBadges userId={userId} user={user} mode="compact" />
           </div>
         </div>
-        {frozen && (
+        {paused && (
+          <span
+            className="bg-violet-600/20 text-violet-300 text-xs font-semibold px-2 py-1 rounded-full"
+            title={pauseReason}
+          >
+            ⏸️ En pausa
+          </span>
+        )}
+        {frozen && !paused && (
           <span className="bg-cyan-600/20 text-cyan-400 text-xs font-semibold px-2 py-1 rounded-full">
             ❄️ Semana congelada
           </span>
@@ -90,8 +98,15 @@ export default function UserCard({ status, justification }) {
         )}
       </div>
 
+      {paused && (
+        <p className="mb-2 text-xs text-violet-200/80 bg-violet-900/20 border border-violet-700/30 rounded-xl px-3 py-2 leading-snug">
+          Pausa por salud: no participa hasta recuperarse. Sin meta ni multas;
+          su racha, escudo, nivel de multa y plazos de recuperación quedan detenidos.
+        </p>
+      )}
+
       {/* Progress bar */}
-      <div className="mb-2">
+      <div className={`mb-2 ${paused ? 'hidden' : ''}`}>
         <div className="flex justify-between text-sm text-gray-400 mb-1">
           <span>Sesiones esta semana</span>
           <span className="font-mono font-bold text-white">

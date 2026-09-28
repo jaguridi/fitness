@@ -10,8 +10,8 @@ import {
   formatWeekLabel,
   getWeeksBetween,
 } from '../hooks/useWeekId'
-import { getAbsenceRecoveryWindow } from '../game/absences.js'
-import { getHoliday } from '../game/holidays.js'
+import { getAbsenceRecoveryWindow, isAbsenceRecoverySuspended } from '../game/absences.js'
+import { getHoliday, getPause } from '../game/holidays.js'
 import Avatar from './Avatar'
 import { useAuth } from '../context/AuthContext'
 import Card from './ui/Card'
@@ -167,6 +167,11 @@ export default function AbsencePlanner({ absences = [], onChange, recovery = nul
     }
     if (totalFrozen === 0) {
       setError('Debes congelar al menos 1 sesión.')
+      return
+    }
+    // A paused week requires nothing: freezing it would only create debt.
+    if (weeksInRange.some((wk) => getPause(userId, wk))) {
+      setError('Estás en pausa en esas semanas: no tienes sesiones que congelar.')
       return
     }
 
@@ -357,7 +362,9 @@ export default function AbsencePlanner({ absences = [], onChange, recovery = nul
                 ? (a.debtUnpaid || 0)
                 : (recovery?.remainingDebtByAbsence?.[a.id] ?? Math.max(0, totalDebt - paid))
               const window = !isLegacy ? getAbsenceRecoveryWindow(a, absences) : []
-              const deadline = window[window.length - 1]
+              // Inside an open-ended pause the window's last week is no deadline.
+              const suspended = !isLegacy && !closed && isAbsenceRecoverySuspended(a, absences)
+              const deadline = suspended ? null : window[window.length - 1]
               return (
                 <div
                   key={a.id}
@@ -382,7 +389,9 @@ export default function AbsencePlanner({ absences = [], onChange, recovery = nul
                           : isLegacy
                           ? 'Recuperación manual (formato antiguo)'
                           : `Activo · deuda ${totalDebt} · pagadas ${paid} · faltan ${remaining}${
-                              deadline ? ` · plazo: semana del ${formatWeekLabel(deadline)}` : ''
+                              suspended
+                                ? ' · plazo detenido mientras estás en pausa'
+                                : deadline ? ` · plazo: semana del ${formatWeekLabel(deadline)}` : ''
                             }`}
                       </p>
                       {!isLegacy && paidWeeks.length > 0 && (

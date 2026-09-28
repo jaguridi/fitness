@@ -13,6 +13,8 @@ const TIMEFRAMES = [
   { id: 26, label: '26 sem' },
 ]
 const DEFAULT_TIMEFRAME = 8
+// Weeks that neither build nor break a streak, and don't count for compliance.
+const NEUTRAL_STATUSES = ['frozen', 'holiday', 'paused']
 
 function barColor(status, lifeUsed) {
   if (lifeUsed) return 'bg-indigo-500'
@@ -21,6 +23,7 @@ function barColor(status, lifeUsed) {
     case 'missed':    return 'bg-red-500'
     case 'frozen':    return 'bg-gray-500'
     case 'holiday':   return 'bg-cyan-500'
+    case 'paused':    return 'bg-violet-500'
     case 'justified': return 'bg-amber-500'
     default:          return 'bg-gray-700'
   }
@@ -31,7 +34,7 @@ function calcBestStreak(summaries) {
   const sorted = [...summaries].sort((a, b) => a.weekId.localeCompare(b.weekId))
   for (const s of sorted) {
     if (s.status === 'completed' || s.lifeUsed) { cur++; best = Math.max(best, cur) }
-    else if (!['frozen', 'holiday'].includes(s.status)) cur = 0
+    else if (!NEUTRAL_STATUSES.includes(s.status)) cur = 0
   }
   return best
 }
@@ -74,8 +77,8 @@ export default function Stats({ gameState }) {
     const wks = allWorkouts[u.id] || []
     const firestoreUser = users.find((fu) => fu.id === u.id) || {}
     const userConst = USERS.find((c) => c.id === u.id)
-    // Frozen weeks and agreed holidays don't count toward compliance.
-    const scorable = sums.filter((s) => !['frozen', 'holiday'].includes(s.status))
+    // Frozen weeks, agreed holidays and participation pauses don't count toward compliance.
+    const scorable = sums.filter((s) => !NEUTRAL_STATUSES.includes(s.status))
     const completed = scorable.filter((s) => s.status === 'completed' || s.lifeUsed).length
     const total = scorable.length
     const rate = total > 0 ? Math.round((completed / total) * 100) : 0

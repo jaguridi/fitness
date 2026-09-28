@@ -312,7 +312,7 @@ export default function useGameLogic() {
       const user = { ...userFirestore, avatar: moodAvatar }
 
       const sessions = getSessionCount(userId)
-      const { recoverySessions, frozenSessions, totalRequired, fullyFrozen, inRecoveryWindow } =
+      const { recoverySessions, frozenSessions, totalRequired, fullyFrozen, inRecoveryWindow, paused, pauseReason } =
         computeWeekRequirements(userId, currentWeekId, absences)
       const regularSessions = Math.min(sessions, WEEKLY_GOAL)
       const debtConsumedThisWeek = liveRecovery.debtConsumedByUserWeek[userId]?.[currentWeekId] || 0
@@ -357,6 +357,9 @@ export default function useGameLogic() {
         frozenSessions,
         bonusSessions,
         frozen: fullyFrozen,
+        // Participation pause: out of the game (implies frozen), not a freeze.
+        paused: !!paused,
+        pauseReason,
         partiallyFrozen: !fullyFrozen && frozenSessions > 0,
         goalMet,
         progress: totalRequired > 0 ? Math.min(1, sessions / totalRequired) : 1,

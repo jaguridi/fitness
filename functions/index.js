@@ -37,7 +37,7 @@ import {
 } from './game/absences.js'
 import { computeWeekEndOutcome, getSimulationWeeks } from './game/weekEnd.js'
 import { USER_IDS, USER_GENDER } from './game/constants.js'
-import { getHoliday } from './game/holidays.js'
+import { getAgreedRecap } from './game/holidays.js'
 
 // Spanish gendered word by user: pick(userId, femaleForm, maleForm).
 const gword = (userId, female, male) => (USER_GENDER[userId] === 'f' ? female : male)
@@ -170,8 +170,10 @@ export const mondayKickoff = onSchedule(
     const [users, absences] = await Promise.all([getAllUsers(), getAllAbsences()])
     await Promise.all(
       users.map(async (u) => {
-        const { fullyFrozen, totalRequired, recoverySessions } =
+        const { fullyFrozen, totalRequired, recoverySessions, paused } =
           computeWeekRequirements(u.id, weekId, absences)
+        // Paused users are out of the game until they recover: no nudging.
+        if (paused) return
         if (fullyFrozen) {
           await sendPushToUser(
             u,
@@ -331,7 +333,7 @@ async function sendWeekCloseResults(weekId) {
   await Promise.all(summSnap.docs.map(async (d) => {
     const s = d.data()
     const user = users.find((u) => u.id === s.userId)
-    if (!user) return
+    if (!user || s.status === 'paused') return
 
     let title = '📋 Cierre de semana'
     let body = ''
@@ -549,11 +551,12 @@ export const generateWeeklyRecap = onCall(
     const { weekId } = request.data
     if (!weekId) throw new HttpsError('invalid-argument', 'weekId is required.')
 
-    // Family-approved holiday copy must replace any earlier ordinary recap.
-    const holiday = getHoliday(weekId)
-    if (holiday) {
-      const recapData = { weekId, recap: holiday.recap, holidayName: holiday.name,
-        revision: holiday.revision, createdAt: new Date() }
+    // Family-approved copy (holidays, compensation weeks) must replace any
+    // earlier ordinary recap.
+    const agreed = getAgreedRecap(weekId)
+    if (agreed) {
+      const recapData = { weekId, recap: agreed.recap, holidayName: agreed.name,
+        revision: agreed.revision, createdAt: new Date() }
       await db.collection('weekly_recaps').doc(weekId).set(recapData, { merge: true })
       return recapData
     }
@@ -617,7 +620,9 @@ Usa humor, sarcasmo cariñoso y referencias deportivas. Celebra a los que cumpli
 Incluye 2-3 emojis. NO uses formato markdown. Solo texto plano con saltos de línea.
 Si alguien ganó un escudo o vida extra, celébralo. Si alguien pagó multa, menciónalo con humor.
 El género de cada persona va entre paréntesis (hombre/mujer): respétalo SIEMPRE al conjugar
-adjetivos y artículos (ej.: para una mujer usa "cansada", "la campeona", no "cansado").`,
+adjetivos y artículos (ej.: para una mujer usa "cansada", "la campeona", no "cansado").
+estado=paused significa que esa persona está en pausa por salud y no participa: NUNCA bromees
+sobre ella ni sobre su salud; a lo más mándale ánimo en una frase breve y cariñosa.`,
         }, {
           role: 'user',
           content: `Resumen de la semana ${weekId}:\n${summaryText}`,
@@ -710,6 +715,7 @@ export const generateMonthlyRecap = onCall(
           weeksJustified: 0,
           weeksFrozen: 0,
           weeksHoliday: 0,
+          weeksPaused: 0,
           finesPaid: 0,
           minutes: 0,
           calories: 0,
@@ -723,6 +729,7 @@ export const generateMonthlyRecap = onCall(
       else if (s.status === 'justified') u.weeksJustified++
       else if (s.status === 'frozen') u.weeksFrozen++
       else if (s.status === 'holiday') u.weeksHoliday++
+      else if (s.status === 'paused') u.weeksPaused++
     }
     for (const w of monthWorkouts) {
       const u = perUser[w.userId]
@@ -740,6 +747,7 @@ export const generateMonthlyRecap = onCall(
       if (u.weeksJustified > 0) parts.push(`${u.weeksJustified} justificadas`)
       if (u.weeksFrozen > 0) parts.push(`${u.weeksFrozen} congeladas`)
       if (u.weeksHoliday > 0) parts.push(`${u.weeksHoliday} libres por Fiestas Patrias (sin obligación ni multa)`)
+      if (u.weeksPaused > 0) parts.push(`${u.weeksPaused} en pausa por salud (no participó; no bromear sobre esto)`)
       if (u.finesPaid > 0) parts.push(`multas=$${u.finesPaid}`)
       if (u.calories > 0) parts.push(`${u.calories} kcal`)
       return parts.join(', ')

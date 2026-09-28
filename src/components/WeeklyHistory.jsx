@@ -41,6 +41,7 @@ export default function WeeklyHistory() {
       case 'missed': return { text: 'Multada', color: 'text-red-400' }
       case 'frozen': return { text: 'Congelada', color: 'text-blue-400' }
       case 'holiday': return { text: '🇨🇱 Semana libre', color: 'text-cyan-300' }
+      case 'paused': return { text: '⏸️ En pausa', color: 'text-violet-300' }
       case 'justified': return { text: '⚖️ Justificada', color: 'text-amber-400' }
       default: return { text: status, color: 'text-gray-400' }
     }
@@ -95,6 +96,8 @@ export default function WeeklyHistory() {
                   <p className="text-xs text-gray-400">
                     {s.sessions} sesiones
                     {s.status === 'holiday' && ' | Fiestas Patrias — todas extra'}
+                    {s.bonusName && ' | Compensación — todas extra'}
+                    {s.status === 'paused' && ' | Pausa por salud — sin meta ni multa'}
                     {s.debtConsumed > 0 && ` | 🔄 ${s.debtConsumed} recuperada${s.debtConsumed > 1 ? 's' : ''}`}
                     {s.frozenSessions > 0 && ` | ❄️ ${s.frozenSessions} congelada${s.frozenSessions > 1 ? 's' : ''}`}
                     {s.debtUnpaid > 0 && ` | 🔄 recuperación no pagada: ${s.debtUnpaid}`}

@@ -24,12 +24,15 @@
 //     Extras consumed for debt don't count toward EXTRA_LIFE_THRESHOLD.
 //     An optional `extraRecoveryWeeks: N` grants that absence N more ACTIVE
 //     weeks at the END of its window — a one-off deadline extension.
+//     Weeks of a participation pause (holidays.js) are dropped from the window
+//     and don't count, so the deadline stops while the user is out; while the
+//     pause has no end date, a window that reaches it is SUSPENDED (no deadline).
 //
 // Both formats are filtered/handled wherever absences are inspected.
 
 import { WEEKLY_GOAL } from './constants.js'
-import { getRecoveryWindow } from './weekId.js'
-import { HOLIDAY_WEEKS, getHoliday } from './holidays.js'
+import { getRecoveryWindow, getWeeksBetween } from './weekId.js'
+import { HOLIDAY_WEEKS, getHoliday, getBonusWeek, getPause, getUserPauses } from './holidays.js'
 
 export function isLegacyAbsence(a) {
   return typeof a.frozenWeekId === 'string'
@@ -99,9 +102,9 @@ function otherFrozenWeeks(a, allAbsences) {
   return { full, partial }
 }
 
-export function getAbsenceRecoveryWindow(a, allAbsences = null) {
+function recoveryWindowInfo(a, allAbsences) {
   const range = getAbsenceRange(a)
-  if (!range) return []
+  if (!range) return { weeks: [], suspended: false }
   const { full, partial } = otherFrozenWeeks(a, allAbsences)
   // An agreed holiday is an optional recovery opportunity, but does not use
   // up one of the active weeks available to repay an absence.
@@ -109,10 +112,36 @@ export function getAbsenceRecoveryWindow(a, allAbsences = null) {
     full.delete(wk)
     partial.add(wk)
   }
-  return getRecoveryWindow(
-    range.startWeekId, range.endWeekId, RECOVERY_PADDING, full,
-    RECOVERY_PADDING + extraRecoveryWeeks(a), partial
+  // A participation pause takes the user out of the game: its weeks are
+  // neither in the window nor part of the deadline. An open-ended pause cuts
+  // the trailing walk, because the weeks after it aren't known yet.
+  let openFrom = null
+  for (const p of getUserPauses(a.userId)) {
+    if (p.untilWeekId == null) {
+      if (openFrom == null || p.fromWeekId < openFrom) openFrom = p.fromWeekId
+    } else {
+      for (const wk of getWeeksBetween(p.fromWeekId, p.untilWeekId)) full.add(wk)
+    }
+  }
+  const trailing = RECOVERY_PADDING + extraRecoveryWeeks(a)
+  const weeks = getRecoveryWindow(
+    range.startWeekId, range.endWeekId, RECOVERY_PADDING, full, trailing, partial, openFrom
   )
+  const counted = weeks.filter((wk) => wk > range.endWeekId && !partial.has(wk)).length
+  return { weeks, suspended: openFrom != null && counted < trailing }
+}
+
+export function getAbsenceRecoveryWindow(a, allAbsences = null) {
+  return recoveryWindowInfo(a, allAbsences).weeks
+}
+
+/**
+ * True while the absence's deadline falls inside an open-ended participation
+ * pause: its window is incomplete, so it must never be settled (its last week
+ * is NOT a deadline) until the pause gets an end date.
+ */
+export function isAbsenceRecoverySuspended(a, allAbsences = null) {
+  return recoveryWindowInfo(a, allAbsences).suspended
 }
 
 /** createdAt can be a Firestore Timestamp, a plain {seconds} object, or absent. */
@@ -138,7 +167,7 @@ function legacyRecoverySessions(userId, weekId, absences) {
  * UI can't drift apart.
  */
 export function requiredSessionsForWeek(userId, weekId, absences, frozenTotals = null) {
-  if (getHoliday(weekId)) return 0
+  if (getHoliday(weekId) || getBonusWeek(userId, weekId) || getPause(userId, weekId)) return 0
   const frozen = frozenTotals
     ? (frozenTotals[weekId] || 0)
     : (frozenTotalsByWeek(userId, absences)[weekId] || 0)
@@ -226,8 +255,16 @@ export function simulateAutoRecovery(absences, sessionsByUserWeek) {
  * - totalRequired: WEEKLY_GOAL + recovery - frozen (clamped to 0)
  * - fullyFrozen: true when frozenSessions covers the entire (goal+recovery)
  * - inRecoveryWindow: true if any active new-format absence has this week in its ±4 window
+ * - paused / pauseReason: participation pause (nothing required, week neutral)
+ * - bonus: compensation week name (nothing required, every session is an extra)
  */
 export function computeWeekRequirements(userId, weekId, absences) {
+  const pause = getPause(userId, weekId)
+  if (pause) {
+    return { recoverySessions: 0, frozenSessions: 0, totalRequired: 0, fullyFrozen: true,
+      inRecoveryWindow: false, paused: true, pauseReason: pause.reason }
+  }
+
   // Legacy recovery sessions add to the goal
   const recoverySessions = legacyRecoverySessions(userId, weekId, absences)
 
@@ -247,6 +284,13 @@ export function computeWeekRequirements(userId, weekId, absences) {
   if (holiday) {
     return { recoverySessions: 0, frozenSessions: 0, totalRequired: 0,
       fullyFrozen: true, inRecoveryWindow, holiday: holiday.name }
+  }
+  // Not fully frozen: the week is met by definition, so it follows the normal
+  // completed-week rules (streak, fine level) while every session is an extra.
+  const bonus = getBonusWeek(userId, weekId)
+  if (bonus) {
+    return { recoverySessions: 0, frozenSessions: 0, totalRequired: 0,
+      fullyFrozen: false, inRecoveryWindow, bonus: bonus.name }
   }
   const fullyFrozen = frozenSessions >= baseGoal
   const totalRequired = Math.max(0, baseGoal - frozenSessions)

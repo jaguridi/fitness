@@ -113,18 +113,23 @@ export function getWeeksBetween(startWeekId, endWeekId) {
  * kept IN the window — extras done there can still pay debt — but, like
  * `frozenWeeks`, they don't count toward the padding, so the deadline is the
  * same as if they were skipped. A week in both sets is skipped.
+ *
+ * `openFrom` marks the start of an open-ended skip (e.g. a pause with no end
+ * date yet): no week from it onward can join the window, so the trailing walk
+ * stops there and may return fewer than `paddingAfter` active weeks.
  */
-export function getRecoveryWindow(startWeekId, endWeekId, padding = 4, frozenWeeks = null, paddingAfter = null, partialWeeks = null) {
+export function getRecoveryWindow(startWeekId, endWeekId, padding = 4, frozenWeeks = null, paddingAfter = null, partialWeeks = null, openFrom = null) {
   if (!startWeekId || !endWeekId) return []
   const skip = frozenWeeks instanceof Set ? frozenWeeks : new Set(frozenWeeks || [])
   const partial = partialWeeks instanceof Set ? partialWeeks : new Set(partialWeeks || [])
   const trailing = typeof paddingAfter === 'number' && paddingAfter >= 0 ? paddingAfter : padding
+  const beyond = (wk) => openFrom != null && wk >= openFrom
 
   const before = []
   let counted = 0
   let cursor = getPreviousWeekId(startWeekId)
   for (let guard = 0; guard < 104 && counted < padding; guard++) {
-    if (!skip.has(cursor)) {
+    if (!skip.has(cursor) && !beyond(cursor)) {
       before.unshift(cursor)
       if (!partial.has(cursor)) counted++
     }
@@ -137,6 +142,7 @@ export function getRecoveryWindow(startWeekId, endWeekId, padding = 4, frozenWee
   counted = 0
   cursor = getNextWeekId(endWeekId)
   for (let guard = 0; guard < 104 && counted < trailing; guard++) {
+    if (beyond(cursor)) break
     if (!skip.has(cursor)) {
       after.push(cursor)
       if (!partial.has(cursor)) counted++

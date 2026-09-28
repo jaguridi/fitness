@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getWeeklyRecap } from '../services/firebaseService'
 import { getPreviousWeekId } from '../hooks/useWeekId'
-import { getHoliday } from '../game/holidays'
+import { getHoliday, getAgreedRecap } from '../game/holidays'
 
 /**
  * Weekly Recap — AI-generated humorous summary of the previous week.
@@ -15,7 +15,10 @@ export default function WeeklyRecap({ currentWeekId }) {
 
   const prevWeekId = getPreviousWeekId(currentWeekId)
   const holiday = getHoliday(prevWeekId)
-  const dismissedKey = `recap_dismissed_${prevWeekId}${holiday ? `_${holiday.revision}` : ''}`
+  // Family-approved copy carries a revision so a replaced recap shows again
+  // even to whoever dismissed the earlier version.
+  const agreed = getAgreedRecap(prevWeekId)
+  const dismissedKey = `recap_dismissed_${prevWeekId}${agreed ? `_${agreed.revision}` : ''}`
 
   useEffect(() => {
     // Check if user already dismissed this recap
