@@ -1,11 +1,23 @@
 // One-off family agreements. A holiday creates no recovery debt, preserves
 // streaks/lives/shields/fine levels, and makes every workout an extra.
 // Keep this dated: it must not silently grant future holidays.
+// emoji/title label the week in history, the recap card and the close push.
 export const HOLIDAY_WEEKS = {
   '2026-W38': {
     name: 'Fiestas Patrias',
+    emoji: '🇨🇱',
+    title: '🇨🇱 ¡Felices Fiestas Patrias!',
     recap: '¡Felices Fiestas Patrias, familia! 🇨🇱 Ojalá hayan disfrutado las empanadas, los asados y el descanso bien merecido. Tal como acordamos entre todos, la semana del 14 al 20 de septiembre fue libre: sin multas ni nuevas sesiones por recuperar. ¡Felicitaciones a José, Javi y Gonza por sumar una sesión extra cada uno, que cuenta para sus recuperaciones pendientes! 💪 Esta semana retomamos el ritmo con buena energía. ¡Viva Chile! 🎉',
     revision: 'fiestas-patrias-2026',
+  },
+  // Agreed by the family during the week itself, applied after its close
+  // (scripts/dev-only/apply-w41-perdonazo-2026.mjs).
+  '2026-W41': {
+    name: 'Perdonazo masivo',
+    emoji: '🕊️',
+    title: '🕊️ ¡Perdonazo masivo!',
+    recap: '¡Perdonazo masivo, familia! 🕊️ La semana del 5 al 11 de octubre costó para todos, así que acordamos dejarla libre: sin multas, sin tocar rachas ni niveles de multa, y sin nuevas sesiones por recuperar. Lo que alguien entrenara contaba como extra, pero esta vez nadie alcanzó a registrar sesiones, así que simplemente quedó todo perdonado. 🙌 De yapa, los dos congelamientos antiguos de Jose que vencían justo esa semana también quedaron perdonados. Javi, seguimos mandándote mucho ánimo desde acá. 🌱 Ahora sí: esta semana volvemos a movernos en familia. 💪',
+    revision: 'perdonazo-w41-2026',
   },
 }
 

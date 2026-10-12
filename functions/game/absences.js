@@ -27,6 +27,8 @@
 //     Weeks of a participation pause (holidays.js) are dropped from the window
 //     and don't count, so the deadline stops while the user is out; while the
 //     pause has no end date, a window that reaches it is SUSPENDED (no deadline).
+//     A closed absence with `forgivenWeekId` had its unpaid debt forgiven by
+//     family agreement: its window ends before that week.
 //
 // Both formats are filtered/handled wherever absences are inspected.
 
@@ -127,6 +129,11 @@ function recoveryWindowInfo(a, allAbsences) {
   const weeks = getRecoveryWindow(
     range.startWeekId, range.endWeekId, RECOVERY_PADDING, full, trailing, partial, openFrom
   )
+  // A forgiven debt claims no extras from the week it was forgiven on, even if
+  // a holiday agreed later would stretch its window past that week.
+  if (a.forgivenWeekId) {
+    return { weeks: weeks.filter((wk) => wk < a.forgivenWeekId), suspended: false }
+  }
   const counted = weeks.filter((wk) => wk > range.endWeekId && !partial.has(wk)).length
   return { weeks, suspended: openFrom != null && counted < trailing }
 }

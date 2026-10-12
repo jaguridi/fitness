@@ -37,7 +37,7 @@ import {
 } from './game/absences.js'
 import { computeWeekEndOutcome, getSimulationWeeks } from './game/weekEnd.js'
 import { USER_IDS, USER_GENDER } from './game/constants.js'
-import { getAgreedRecap } from './game/holidays.js'
+import { getAgreedRecap, getHoliday } from './game/holidays.js'
 
 // Spanish gendered word by user: pick(userId, femaleForm, maleForm).
 const gword = (userId, female, male) => (USER_GENDER[userId] === 'f' ? female : male)
@@ -338,8 +338,8 @@ async function sendWeekCloseResults(weekId) {
     let title = '📋 Cierre de semana'
     let body = ''
     if (s.status === 'holiday') {
-      title = '🇨🇱 ¡Felices Fiestas Patrias!'
-      body = 'Semana libre y sin multas. ¡Gracias por celebrar en familia!'
+      title = getHoliday(weekId)?.title || '🎉 Semana libre'
+      body = 'Semana libre acordada en familia: sin multas ni deuda nueva.'
       if (s.debtConsumed > 0) body += ` Recuperaste ${s.debtConsumed} sesión(es). 💪`
     } else if (s.status === 'frozen') {
       title = '🧊 Semana congelada'
@@ -715,6 +715,7 @@ export const generateMonthlyRecap = onCall(
           weeksJustified: 0,
           weeksFrozen: 0,
           weeksHoliday: 0,
+          holidayNames: [],
           weeksPaused: 0,
           finesPaid: 0,
           minutes: 0,
@@ -728,7 +729,10 @@ export const generateMonthlyRecap = onCall(
       else if (s.status === 'missed') u.weeksMissed++
       else if (s.status === 'justified') u.weeksJustified++
       else if (s.status === 'frozen') u.weeksFrozen++
-      else if (s.status === 'holiday') u.weeksHoliday++
+      else if (s.status === 'holiday') {
+        u.weeksHoliday++
+        u.holidayNames.push(s.holidayName || getHoliday(s.weekId)?.name || 'semana libre')
+      }
       else if (s.status === 'paused') u.weeksPaused++
     }
     for (const w of monthWorkouts) {
@@ -746,7 +750,7 @@ export const generateMonthlyRecap = onCall(
       if (u.weeksMissed > 0) parts.push(`${u.weeksMissed} fallidas`)
       if (u.weeksJustified > 0) parts.push(`${u.weeksJustified} justificadas`)
       if (u.weeksFrozen > 0) parts.push(`${u.weeksFrozen} congeladas`)
-      if (u.weeksHoliday > 0) parts.push(`${u.weeksHoliday} libres por Fiestas Patrias (sin obligación ni multa)`)
+      if (u.weeksHoliday > 0) parts.push(`${u.weeksHoliday} libres acordadas en familia: ${u.holidayNames.join(', ')} (sin obligación ni multa)`)
       if (u.weeksPaused > 0) parts.push(`${u.weeksPaused} en pausa por salud (no participó; no bromear sobre esto)`)
       if (u.finesPaid > 0) parts.push(`multas=$${u.finesPaid}`)
       if (u.calories > 0) parts.push(`${u.calories} kcal`)

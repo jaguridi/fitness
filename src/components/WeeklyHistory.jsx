@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { USERS, formatCLP, formatExerciseTypes } from '../constants'
 import { getUserSummaries, getWorkoutsByUser } from '../services/firebaseService'
 import { formatWeekLabel } from '../hooks/useWeekId'
+import { getHoliday } from '../game/holidays.js'
 import Avatar from './Avatar'
 
 export default function WeeklyHistory() {
@@ -35,12 +36,12 @@ export default function WeeklyHistory() {
     return () => { cancelled = true }
   }, [selectedUser])
 
-  const statusLabel = (status) => {
+  const statusLabel = (status, weekId) => {
     switch (status) {
       case 'completed': return { text: 'Cumplida', color: 'text-green-400' }
       case 'missed': return { text: 'Multada', color: 'text-red-400' }
       case 'frozen': return { text: 'Congelada', color: 'text-blue-400' }
-      case 'holiday': return { text: '🇨🇱 Semana libre', color: 'text-cyan-300' }
+      case 'holiday': return { text: `${getHoliday(weekId)?.emoji || '🎉'} Semana libre`, color: 'text-cyan-300' }
       case 'paused': return { text: '⏸️ En pausa', color: 'text-violet-300' }
       case 'justified': return { text: '⚖️ Justificada', color: 'text-amber-400' }
       default: return { text: status, color: 'text-gray-400' }
@@ -76,7 +77,7 @@ export default function WeeklyHistory() {
       ) : (
         <div className="space-y-2 max-h-80 overflow-y-auto">
           {summaries.map((s) => {
-            const st = statusLabel(s.status)
+            const st = statusLabel(s.status, s.weekId)
             const bgClass = s.status === 'justified'
               ? 'bg-amber-900/20 border border-amber-700/30'
               : s.status === 'frozen'
@@ -95,7 +96,7 @@ export default function WeeklyHistory() {
                   </p>
                   <p className="text-xs text-gray-400">
                     {s.sessions} sesiones
-                    {s.status === 'holiday' && ' | Fiestas Patrias — todas extra'}
+                    {s.status === 'holiday' && ` | ${s.holidayName || 'Semana libre'} — todas extra`}
                     {s.bonusName && ' | Compensación — todas extra'}
                     {s.status === 'paused' && ' | Pausa por salud — sin meta ni multa'}
                     {s.debtConsumed > 0 && ` | 🔄 ${s.debtConsumed} recuperada${s.debtConsumed > 1 ? 's' : ''}`}

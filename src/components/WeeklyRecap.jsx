@@ -75,7 +75,7 @@ export default function WeeklyRecap({ currentWeekId }) {
       <div className="flex items-center gap-2 mb-2">
         <span className="text-lg">📻</span>
         <span className="text-sm font-bold text-indigo-300">
-          {holiday ? '🇨🇱 ¡Felices Fiestas Patrias!' : `Recap ${recap.weekId}`}
+          {holiday ? holiday.title : `Recap ${recap.weekId}`}
         </span>
       </div>
       <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-line">

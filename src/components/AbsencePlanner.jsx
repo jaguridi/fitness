@@ -103,6 +103,7 @@ export default function AbsencePlanner({ absences = [], onChange, recovery = nul
   const recoveryNonFrozen = recoveryWindow.filter((w) =>
     !frozenWeeks[w] && !otherFrozen.has(w) && !getHoliday(w)
   )
+  const windowHolidays = recoveryWindow.filter((w) => getHoliday(w)).map((w) => getHoliday(w).name)
 
   const resetForm = () => {
     setEditingId(null)
@@ -295,8 +296,8 @@ export default function AbsencePlanner({ absences = [], onChange, recovery = nul
                   alrededor del rango, incluidas las prórrogas vigentes, para hacer sesiones extra y pagar la deuda.
                 </>
               )}
-              {recoveryWindow.some((w) => getHoliday(w)) && (
-                <> La semana de Fiestas Patrias no consume plazo; sus entrenamientos sí cuentan para recuperar.</>
+              {windowHolidays.length > 0 && (
+                <> Las semanas libres acordadas ({windowHolidays.join(', ')}) no consumen plazo; sus entrenamientos sí cuentan para recuperar.</>
               )}
             </p>
           </div>
@@ -383,7 +384,9 @@ export default function AbsencePlanner({ absences = [], onChange, recovery = nul
                       </p>
                       <p className="text-xs text-gray-400 mt-0.5">
                         {closed
-                          ? a.debtUnpaid > 0
+                          ? a.forgivenWeekId
+                            ? `Cerrado · pagaste ${Math.max(0, totalDebt - a.debtUnpaid)} de ${totalDebt} · ${a.debtUnpaid} perdonada${a.debtUnpaid === 1 ? '' : 's'} sin multa 🕊️`
+                            : a.debtUnpaid > 0
                             ? `Cerrado · pagaste ${Math.max(0, totalDebt - a.debtUnpaid)} de ${totalDebt} · ${a.debtUnpaid} sin pagar → multa ${formatCLP(a.fineApplied || 0)}`
                             : `Cerrado · pagaste ${totalDebt} de ${totalDebt} ✅`
                           : isLegacy

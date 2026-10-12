@@ -72,3 +72,46 @@ describe('agreed Fiestas Patrias holiday', () => {
     expect(out.absenceUpdates[0].data).toMatchObject({ status: 'closed', debtUnpaid: 0, fineApplied: 0 })
   })
 })
+
+describe('W41 perdonazo masivo', () => {
+  const W41 = '2026-W41'
+  const jose = { ...user, walletBalance: 20833, currentFineLevel: 5000, extraLives: 0,
+    consecutiveSuccesses: 0, hasShield: false }
+  // Jose's real freezes: two settled (and forgiven) at the W41 close, one still open.
+  const oldTrip = { id: 'wPUvg3', userId: 'user1', status: 'closed', frozenWeeks: { '2026-W29': 3, '2026-W30': 1 },
+    extraRecoveryWeeks: 4, createdAt: { seconds: 1 }, debtUnpaid: 3, fineApplied: 0, forgivenWeekId: W41 }
+  const w35 = { id: 'VhWccZ', userId: 'user1', status: 'closed', frozenWeeks: { '2026-W35': 3 },
+    createdAt: { seconds: 2 }, debtUnpaid: 3, fineApplied: 0, forgivenWeekId: W41 }
+  const w37 = { id: 'uo3ZXg', userId: 'user1', status: 'active', frozenWeeks: { '2026-W37': 2 }, createdAt: { seconds: 3 } }
+  const all = [oldTrip, w35, w37]
+
+  it('covers 5–11 October 2026 for everyone but keeps Javi paused', () => {
+    expect(getWeekId('2026-10-05')).toBe(W41)
+    expect(getWeekId('2026-10-11')).toBe(W41)
+    expect(getHoliday(W41).name).toBe('Perdonazo masivo')
+    for (const uid of ['user1', 'user3', 'user4']) expect(computeWeekRequirements(uid, W41, []).totalRequired).toBe(0)
+    expect(computeWeekRequirements('user2', W41, []).paused).toBe(true)
+    expect(computeWeekRequirements('user1', '2026-W42', []).totalRequired).toBe(3)
+  })
+
+  it('forgives a missed week without touching any stat', () => {
+    const out = computeWeekEndOutcome({ weekId: W41, userIds: ['user1'], users: [jose], absences: all,
+      weekWorkouts: [], weekJustifications: [], sessionsByUserWeek: { user1: {} } })
+    expect(Object.assign({}, jose, ...out.userUpdates.map((u) => u.data))).toEqual(jose)
+    expect(out.summaries[0].data).toMatchObject({ status: 'holiday', holidayName: 'Perdonazo masivo', fineApplied: 0 })
+    expect(out.absenceUpdates).toEqual([])
+  })
+
+  it('moves the open W37 freeze deadline from W42 to W43', () => {
+    expect(getAbsenceRecoveryWindow(w37, all).at(-1)).toBe('2026-W43')
+  })
+
+  it('keeps forgiven freezes from claiming extras on or after W41', () => {
+    expect(getAbsenceRecoveryWindow(w35, all).at(-1)).toBe('2026-W40')
+    expect(getAbsenceRecoveryWindow(oldTrip, all).every((w) => w < W41)).toBe(true)
+    const sim = simulateAutoRecovery(all, { user1: { [W41]: 1, '2026-W42': 4 } })
+    expect(sim.debtConsumedPerAbsenceWeek.uo3ZXg).toEqual({ [W41]: 1, '2026-W42': 1 })
+    expect(sim.remainingDebtByAbsence.uo3ZXg).toBe(0)
+    expect(sim.remainingDebtByAbsence.VhWccZ).toBe(3)
+  })
+})
