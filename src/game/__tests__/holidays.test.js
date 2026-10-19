@@ -91,7 +91,7 @@ describe('W41 perdonazo masivo', () => {
     expect(getHoliday(W41).name).toBe('Perdonazo masivo')
     for (const uid of ['user1', 'user3', 'user4']) expect(computeWeekRequirements(uid, W41, []).totalRequired).toBe(0)
     expect(computeWeekRequirements('user2', W41, []).paused).toBe(true)
-    expect(computeWeekRequirements('user1', '2026-W42', []).totalRequired).toBe(3)
+    expect(computeWeekRequirements('user1', '2026-W43', []).totalRequired).toBe(3)
   })
 
   it('forgives a missed week without touching any stat', () => {
@@ -102,10 +102,6 @@ describe('W41 perdonazo masivo', () => {
     expect(out.absenceUpdates).toEqual([])
   })
 
-  it('moves the open W37 freeze deadline from W42 to W43', () => {
-    expect(getAbsenceRecoveryWindow(w37, all).at(-1)).toBe('2026-W43')
-  })
-
   it('keeps forgiven freezes from claiming extras on or after W41', () => {
     expect(getAbsenceRecoveryWindow(w35, all).at(-1)).toBe('2026-W40')
     expect(getAbsenceRecoveryWindow(oldTrip, all).every((w) => w < W41)).toBe(true)
@@ -113,5 +109,52 @@ describe('W41 perdonazo masivo', () => {
     expect(sim.debtConsumedPerAbsenceWeek.uo3ZXg).toEqual({ [W41]: 1, '2026-W42': 1 })
     expect(sim.remainingDebtByAbsence.uo3ZXg).toBe(0)
     expect(sim.remainingDebtByAbsence.VhWccZ).toBe(3)
+  })
+})
+
+describe("W42 perdonazo masivo and Javi's return", () => {
+  const W42 = '2026-W42'
+  const jose = { ...user, walletBalance: 20833, currentFineLevel: 5000, extraLives: 0,
+    consecutiveSuccesses: 0, hasShield: false }
+  const javi = { id: 'user2', walletBalance: 8334, currentFineLevel: 5000, extraLives: 0,
+    consecutiveMisses: 0, consecutiveSuccesses: 0, hasShield: true, bankedExtras: 0 }
+  const w37 = { id: 'uo3ZXg', userId: 'user1', status: 'active', frozenWeeks: { '2026-W37': 2 }, createdAt: { seconds: 3 } }
+  // Javi's two old freezes, forgiven at her return instead of falling due in W43.
+  const forgiven = { status: 'closed', fineApplied: 0, forgivenWeekId: W42 }
+  const trip = { id: 'yY8ooM', userId: 'user2', frozenWeeks: { '2026-W29': 3, '2026-W30': 1 },
+    extraRecoveryWeeks: 4, createdAt: { seconds: 1 }, debtUnpaid: 2, totalDebt: 4, ...forgiven }
+  const w35 = { id: '0mKAUM', userId: 'user2', frozenWeeks: { '2026-W35': 2 },
+    createdAt: { seconds: 2 }, debtUnpaid: 2, totalDebt: 2, ...forgiven }
+
+  it('covers 12–18 October 2026 for everyone; Javi is paused until it ends', () => {
+    expect(getWeekId('2026-10-12')).toBe(W42)
+    expect(getWeekId('2026-10-18')).toBe(W42)
+    expect(getHoliday(W42).name).toBe('Perdonazo masivo')
+    for (const uid of ['user1', 'user3', 'user4']) expect(computeWeekRequirements(uid, W42, []).totalRequired).toBe(0)
+    expect(computeWeekRequirements('user2', W42, []).paused).toBe(true)
+    for (const uid of ['user1', 'user2', 'user3', 'user4']) {
+      expect(computeWeekRequirements(uid, '2026-W43', []).totalRequired).toBe(3)
+    }
+  })
+
+  it('forgives a missed week without touching any stat', () => {
+    const out = computeWeekEndOutcome({ weekId: W42, userIds: ['user1'], users: [jose], absences: [w37],
+      weekWorkouts: [], weekJustifications: [], sessionsByUserWeek: { user1: {} } })
+    expect(Object.assign({}, jose, ...out.userUpdates.map((u) => u.data))).toEqual(jose)
+    expect(out.summaries[0].data).toMatchObject({ status: 'holiday', holidayName: 'Perdonazo masivo', fineApplied: 0 })
+    expect(out.absenceUpdates).toEqual([])
+  })
+
+  it("moves Jose's open W37 freeze deadline to W44", () => {
+    expect(getAbsenceRecoveryWindow(w37, [w37]).at(-1)).toBe('2026-W44')
+  })
+
+  it('leaves Javi nothing to repay in her first week back', () => {
+    for (const a of [trip, w35]) expect(getAbsenceRecoveryWindow(a, [trip, w35]).every((w) => w < W42)).toBe(true)
+    const out = computeWeekEndOutcome({ weekId: '2026-W43', userIds: ['user2'], users: [javi], absences: [trip, w35],
+      weekWorkouts: Array.from({ length: 3 }, () => ({ userId: 'user2', weekId: '2026-W43' })),
+      weekJustifications: [], sessionsByUserWeek: { user2: { '2026-W43': 3 } } })
+    expect(out.absenceUpdates).toEqual([])
+    expect(out.summaries[0].data).toMatchObject({ status: 'completed', fineApplied: 0, debtConsumed: 0 })
   })
 })

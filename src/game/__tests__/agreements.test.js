@@ -39,14 +39,17 @@ describe('W39 compensation week (Gonza and Fran)', () => {
   })
 })
 
-describe('participation pause (Javi, from W40 until further notice)', () => {
+describe('participation pause (Javi, W40 to W42)', () => {
   const javi = { id: 'user2', ...base, walletBalance: 8334, currentFineLevel: 5000, consecutiveSuccesses: 0, hasShield: true }
+  const pause = PARTICIPATION_PAUSES.find((p) => p.userId === 'user2')
 
-  it('starts at W40 and has no end yet', () => {
+  it('runs from W40 through W42; Javi is back from W43', () => {
     expect(getPause('user2', '2026-W39')).toBeNull()
     expect(getPause('user2', '2026-W40')).not.toBeNull()
-    expect(getPause('user2', '2027-W10')).not.toBeNull()
+    expect(getPause('user2', '2026-W42')).not.toBeNull()
+    expect(getPause('user2', '2026-W43')).toBeNull()
     expect(getPause('user1', '2026-W40')).toBeNull()
+    expect(computeWeekRequirements('user2', '2026-W43', []).totalRequired).toBe(3)
     expect(computeWeekRequirements('user2', '2026-W40', [])).toMatchObject({
       paused: true, totalRequired: 0, fullyFrozen: true, frozenSessions: 0 })
   })
@@ -61,15 +64,21 @@ describe('participation pause (Javi, from W40 until further notice)', () => {
     }
   })
 
-  it('stops the recovery clock: a window reaching the pause is suspended, never settled', () => {
+  it('while open-ended, stops the recovery clock: a window reaching the pause is suspended, never settled', () => {
     const absence = { id: 'a1', userId: 'user2', status: 'active', frozenWeeks: { '2026-W35': 2 } }
-    expect(isAbsenceRecoverySuspended(absence, [absence])).toBe(true)
-    const window = getAbsenceRecoveryWindow(absence, [absence])
-    expect(window.at(-1)).toBe('2026-W39')
-    expect(window.some((w) => w >= '2026-W40')).toBe(false)
-    // Its last pre-pause week is not a deadline, nor is any paused week.
-    expect(close('2026-W39', javi, 0, [absence]).absenceUpdates).toEqual([])
-    expect(close('2026-W40', javi, 0, [absence]).absenceUpdates).toEqual([])
+    const until = pause.untilWeekId
+    try {
+      pause.untilWeekId = null
+      expect(isAbsenceRecoverySuspended(absence, [absence])).toBe(true)
+      const window = getAbsenceRecoveryWindow(absence, [absence])
+      expect(window.at(-1)).toBe('2026-W39')
+      expect(window.some((w) => w >= '2026-W40')).toBe(false)
+      // Its last pre-pause week is not a deadline, nor is any paused week.
+      expect(close('2026-W39', javi, 0, [absence]).absenceUpdates).toEqual([])
+      expect(close('2026-W40', javi, 0, [absence]).absenceUpdates).toEqual([])
+    } finally {
+      pause.untilWeekId = until
+    }
   })
 
   it('does not rescue an absence whose deadline came before the pause', () => {
@@ -82,20 +91,13 @@ describe('participation pause (Javi, from W40 until further notice)', () => {
   })
 
   it('once ended, skips the paused weeks and resumes the deadline after them', () => {
-    const pause = PARTICIPATION_PAUSES.find((p) => p.userId === 'user2')
     const absence = { id: 'a1', userId: 'user2', status: 'active', frozenWeeks: { '2026-W35': 2 } }
-    try {
-      pause.untilWeekId = '2026-W42'
-      expect(getPause('user2', '2026-W43')).toBeNull()
-      expect(isAbsenceRecoverySuspended(absence, [absence])).toBe(false)
-      const window = getAbsenceRecoveryWindow(absence, [absence])
-      expect(window).not.toContain('2026-W40')
-      expect(window.at(-1)).toBe('2026-W43')
-      const out = close('2026-W43', javi, 3, [absence], { user2: { '2026-W43': 3 } })
-      expect(out.absenceUpdates[0].data).toMatchObject({ status: 'closed', debtUnpaid: 2 })
-    } finally {
-      pause.untilWeekId = null
-    }
+    expect(isAbsenceRecoverySuspended(absence, [absence])).toBe(false)
+    const window = getAbsenceRecoveryWindow(absence, [absence])
+    expect(window).not.toContain('2026-W40')
+    expect(window.at(-1)).toBe('2026-W43')
+    const out = close('2026-W43', javi, 3, [absence], { user2: { '2026-W43': 3 } })
+    expect(out.absenceUpdates[0].data).toMatchObject({ status: 'closed', debtUnpaid: 2 })
   })
 })
 

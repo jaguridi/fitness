@@ -19,6 +19,15 @@ export const HOLIDAY_WEEKS = {
     recap: '¡Perdonazo masivo, familia! 🕊️ La semana del 5 al 11 de octubre costó para todos, así que acordamos dejarla libre: sin multas, sin tocar rachas ni niveles de multa, y sin nuevas sesiones por recuperar. Lo que alguien entrenara contaba como extra, pero esta vez nadie alcanzó a registrar sesiones, así que simplemente quedó todo perdonado. 🙌 De yapa, los dos congelamientos antiguos de Jose que vencían justo esa semana también quedaron perdonados. Javi, seguimos mandándote mucho ánimo desde acá. 🌱 Ahora sí: esta semana volvemos a movernos en familia. 💪',
     revision: 'perdonazo-w41-2026',
   },
+  // Agreed after its close too (scripts/dev-only/apply-w42-perdonazo-2026.mjs),
+  // together with Javi's return and the forgiveness of her old freezes.
+  '2026-W42': {
+    name: 'Perdonazo masivo',
+    emoji: '🕊️',
+    title: '🕊️ ¡Otro perdonazo masivo!',
+    recap: '¡Otro perdonazo masivo, familia! 🕊️ La semana del 12 al 18 de octubre tampoco fue fácil, así que acordamos dejarla libre: sin multas, sin tocar rachas ni niveles de multa, y sin nuevas sesiones por recuperar. Nadie alcanzó a registrar sesiones, así que quedó todo perdonado. 🙌 Y la mejor noticia: ¡Javi vuelve al juego esta semana! 🌱 Para que parta limpia, sus dos congelamientos antiguos (4 sesiones pendientes) también quedaron perdonados. Ahora sí, los cuatro de vuelta: a moverse en familia. 💪',
+    revision: 'perdonazo-w42-2026',
+  },
 }
 
 export const getHoliday = (weekId) => HOLIDAY_WEEKS[weekId] || null
@@ -53,7 +62,9 @@ export const PARTICIPATION_PAUSES = [
   {
     userId: 'user2',
     fromWeekId: '2026-W40',
-    untilWeekId: null,
+    // Back from W43 (agreed 2026-10-19); her two old freezes were forgiven
+    // instead of falling due in her first week back.
+    untilWeekId: '2026-W42',
     reason: 'Pausa médica por migraña crónica, hasta nuevo aviso del doctor.',
   },
 ]
