@@ -38,10 +38,17 @@ import {
 import { computeWeekEndOutcome, getSimulationWeeks } from './game/weekEnd.js'
 import { USER_IDS, USER_GENDER } from './game/constants.js'
 import { getAgreedRecap, getHoliday } from './game/holidays.js'
+import { genderGuide, stripGenderTags } from './game/recapText.js'
 
 // Spanish gendered word by user: pick(userId, femaleForm, maleForm).
 const gword = (userId, female, male) => (USER_GENDER[userId] === 'f' ? female : male)
-const genderLabel = (userId) => (USER_GENDER[userId] === 'f' ? 'mujer' : 'hombre')
+
+// Recap prompts pass gender in a separate genderGuide() block; this tells the
+// model to use it for agreement only (W42 leaked "Jose (hombre)" into the copy).
+const GENDER_RULE = `Al final del mensaje viene el género gramatical de cada persona: úsalo SIEMPRE al conjugar
+adjetivos y artículos (ej.: para una mujer usa "cansada", "la campeona", no "cansado").
+NUNCA escribas el género en el texto: nada de "(hombre)", "(mujer)" ni etiquetas parecidas
+junto a los nombres. Escribe cada nombre solo, tal como viene.`
 
 // Note: the secret in Secret Manager is named OPEN_AI_KEY (not the
 // conventional OPENAI_API_KEY) — it was created by hand in the console.
@@ -584,7 +591,7 @@ export const generateWeeklyRecap = onCall(
       const data = d.data()
       return {
         name: usersMap[data.userId] || data.userId,
-        gender: genderLabel(data.userId),
+        gender: USER_GENDER[data.userId],
         sessions: data.sessions || 0,
         totalRequired: data.totalRequired ?? 3,
         status: data.status,
@@ -597,7 +604,7 @@ export const generateWeeklyRecap = onCall(
     })
 
     const summaryText = summaries.map((s) => {
-      const parts = [`${s.name} (${s.gender}): ${s.sessions}/${s.totalRequired} sesiones, estado=${s.status}`]
+      const parts = [`${s.name}: ${s.sessions}/${s.totalRequired} sesiones, estado=${s.status}`]
       if (s.fineApplied > 0) parts.push(`multa=$${s.fineApplied}`)
       if (s.lifeUsed) parts.push('usó vida')
       if (s.lifeEarned) parts.push('ganó vida extra')
@@ -618,18 +625,21 @@ export const generateWeeklyRecap = onCall(
 Genera un resumen semanal breve y entretenido (máximo 4-5 frases) en español chileno informal.
 Usa humor, sarcasmo cariñoso y referencias deportivas. Celebra a los que cumplieron y molesta (con cariño) a los que no.
 Incluye 2-3 emojis. NO uses formato markdown. Solo texto plano con saltos de línea.
+Si le hablas a alguien, usa tú; nunca voseo ("vos", "podés", "tenís").
 Si alguien ganó un escudo o vida extra, celébralo. Si alguien pagó multa, menciónalo con humor.
-El género de cada persona va entre paréntesis (hombre/mujer): respétalo SIEMPRE al conjugar
-adjetivos y artículos (ej.: para una mujer usa "cansada", "la campeona", no "cansado").
+${GENDER_RULE}
 estado=paused significa que esa persona está en pausa por salud y no participa: NUNCA bromees
 sobre ella ni sobre su salud; a lo más mándale ánimo en una frase breve y cariñosa.`,
         }, {
           role: 'user',
-          content: `Resumen de la semana ${weekId}:\n${summaryText}`,
+          content: `Resumen de la semana ${weekId}:\n${summaryText}\n\n${genderGuide(summaries)}`,
         }],
       })
 
-      const recap = completion.choices[0]?.message?.content || 'No se pudo generar el resumen.'
+      const recap = stripGenderTags(
+        completion.choices[0]?.message?.content || 'No se pudo generar el resumen.',
+        Object.values(usersMap),
+      )
 
       // Store in Firestore
       const recapData = { weekId, recap, summaries, createdAt: new Date() }
@@ -708,7 +718,7 @@ export const generateMonthlyRecap = onCall(
       if (!perUser[s.userId]) {
         perUser[s.userId] = {
           name: usersMap[s.userId] || s.userId,
-          gender: genderLabel(s.userId),
+          gender: USER_GENDER[s.userId],
           sessions: 0,
           weeksCompleted: 0,
           weeksMissed: 0,
@@ -744,7 +754,7 @@ export const generateMonthlyRecap = onCall(
 
     const summaryText = Object.values(perUser).map((u) => {
       const parts = [
-        `${u.name} (${u.gender}): ${u.sessions} sesiones, ${u.minutes} min`,
+        `${u.name}: ${u.sessions} sesiones, ${u.minutes} min`,
         `${u.weeksCompleted}/${u.weeksCompleted + u.weeksMissed + u.weeksJustified} semanas cumplidas`,
       ]
       if (u.weeksMissed > 0) parts.push(`${u.weeksMissed} fallidas`)
@@ -778,16 +788,19 @@ Estructura sugerida:
 4. Algún dato curioso (sesiones totales, kcal, tendencia vs mes anterior si está clara)
 5. Una proyección o consejo para el mes siguiente
 
-El género de cada persona va entre paréntesis (hombre/mujer): respétalo SIEMPRE al conjugar
-adjetivos y artículos (ej.: para una mujer usa "cansada", "la campeona", no "cansado").
+${GENDER_RULE}
+Si le hablas a alguien, usa tú; nunca voseo ("vos", "podés", "tenís").
 No uses markdown. Solo texto plano con saltos de línea. Máximo 3 emojis en total.`,
         }, {
           role: 'user',
-          content: `Resumen mensual de ${monthLabel}:\n${summaryText}`,
+          content: `Resumen mensual de ${monthLabel}:\n${summaryText}\n\n${genderGuide(Object.values(perUser))}`,
         }],
       })
 
-      const recap = completion.choices[0]?.message?.content || 'No se pudo generar el resumen.'
+      const recap = stripGenderTags(
+        completion.choices[0]?.message?.content || 'No se pudo generar el resumen.',
+        Object.values(usersMap),
+      )
       const recapData = {
         monthId,
         monthLabel,
@@ -890,8 +903,9 @@ EVIDENCIA (aquí se falla seguido — lee con cuidado):
   hospitalización, fractura, licencia médica, atención de urgencia.
 - Si adjunta una imagen, evalúala como evidencia.
 
-El género de la persona va indicado en el contexto: respétalo al conjugar (para una mujer,
-"estuviste enferma", no "enfermo"). Habla de tú, en español neutro de Chile (nunca "vos").
+El género gramatical de la persona va indicado en el contexto: respétalo al conjugar (para una
+mujer, "estuviste enferma", no "enfermo"), pero nunca lo escribas como etiqueta ("(mujer)",
+"(hombre)"). Habla de tú, en español neutro de Chile (nunca "vos").
 
 Responde SOLO con un JSON válido (sin markdown, sin backticks):
 {"valid": true/false, "sessionsAccepted": N, "reason": "explicación breve en español de máximo 2 frases"}
@@ -969,7 +983,8 @@ async function trainingHabits(userId, weekId) {
  * session, and which don't. Read server-side from Firestore, so the client
  * can't inflate it.
  *
- * Returns null when the caller didn't send userId/weekId (older clients) —
+ * Returns { name, text } (name lets the caller scrub gender tags from the
+ * verdict), or null when the caller didn't send userId/weekId (older clients) —
  * the judge then falls back to reading the text alone.
  */
 async function buildWeekContext(userId, weekId, sessionsJustified) {
@@ -996,7 +1011,8 @@ async function buildWeekContext(userId, weekId, sessionsJustified) {
     .sort()
 
   const lines = [
-    `- Persona: ${name} (${genderLabel(userId)})`,
+    `- Persona: ${name}`,
+    `- Género gramatical de la persona: ${USER_GENDER[userId] === 'f' ? 'femenino' : 'masculino'} (solo para conjugar)`,
     `- Semana evaluada: ${weekId} (${shortDate(start)} a ${shortDate(end)}). Hoy es ${shortDate(new Date())}.`,
     `- Meta base: 3 sesiones${recoverySessions > 0 ? ` + ${recoverySessions} de recuperación` : ''}`,
   ]
@@ -1044,7 +1060,7 @@ async function buildWeekContext(userId, weekId, sessionsJustified) {
     lines.push(`- Sesiones que pide justificar: ${sessionsJustified}`)
   }
 
-  return `CONTEXTO DE LA SEMANA (datos del sistema, confiables):\n${lines.join('\n')}`
+  return { name, text: `CONTEXTO DE LA SEMANA (datos del sistema, confiables):\n${lines.join('\n')}` }
 }
 
 export const evaluateJustification = onCall(
@@ -1078,7 +1094,7 @@ export const evaluateJustification = onCall(
       content.push({
         type: 'text',
         text: `${weekContext
-          ? `${weekContext}\n\n`
+          ? `${weekContext.text}\n\n`
           : 'CONTEXTO DE LA SEMANA: no disponible. No asumas que no hubo congelamiento; juzga el relato.\n\n'
         }JUSTIFICACIÓN DEL USUARIO:\n"${excuse.trim()}"${photoBase64 ? '\n\n(El usuario adjuntó una imagen como evidencia. Evalúala.)' : ''}`,
       })
@@ -1120,7 +1136,7 @@ export const evaluateJustification = onCall(
       return {
         valid: sessionsAccepted > 0,
         sessionsAccepted,
-        reason: result.reason || 'Sin explicación.',
+        reason: stripGenderTags(result.reason || 'Sin explicación.', [weekContext?.name]),
       }
     } catch (err) {
       console.error('AI Judge (gpt-5.6-luna) error:', err)
