@@ -1,6 +1,6 @@
 {
   "redirects": [
-    { "source": "/fitness/:path*", "destination": "/", "permanent": false }
+    { "source": "/fitness(/.*)?", "destination": "/", "permanent": false }
   ],
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
