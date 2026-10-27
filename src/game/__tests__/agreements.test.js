@@ -49,7 +49,7 @@ describe('participation pause (Javi, W40 to W42)', () => {
     expect(getPause('user2', '2026-W42')).not.toBeNull()
     expect(getPause('user2', '2026-W43')).toBeNull()
     expect(getPause('user1', '2026-W40')).toBeNull()
-    expect(computeWeekRequirements('user2', '2026-W43', []).totalRequired).toBe(3)
+    expect(computeWeekRequirements('user2', '2026-W44', []).totalRequired).toBe(3)
     expect(computeWeekRequirements('user2', '2026-W40', [])).toMatchObject({
       paused: true, totalRequired: 0, fullyFrozen: true, frozenSessions: 0 })
   })
@@ -95,8 +95,9 @@ describe('participation pause (Javi, W40 to W42)', () => {
     expect(isAbsenceRecoverySuspended(absence, [absence])).toBe(false)
     const window = getAbsenceRecoveryWindow(absence, [absence])
     expect(window).not.toContain('2026-W40')
-    expect(window.at(-1)).toBe('2026-W43')
-    const out = close('2026-W43', javi, 3, [absence], { user2: { '2026-W43': 3 } })
+    // W43 is a free week, so the first counted week after the pause is W44.
+    expect(window.at(-1)).toBe('2026-W44')
+    const out = close('2026-W44', javi, 3, [absence], { user2: { '2026-W44': 3 } })
     expect(out.absenceUpdates[0].data).toMatchObject({ status: 'closed', debtUnpaid: 2 })
   })
 })

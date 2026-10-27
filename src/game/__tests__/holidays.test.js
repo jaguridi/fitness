@@ -91,7 +91,7 @@ describe('W41 perdonazo masivo', () => {
     expect(getHoliday(W41).name).toBe('Perdonazo masivo')
     for (const uid of ['user1', 'user3', 'user4']) expect(computeWeekRequirements(uid, W41, []).totalRequired).toBe(0)
     expect(computeWeekRequirements('user2', W41, []).paused).toBe(true)
-    expect(computeWeekRequirements('user1', '2026-W43', []).totalRequired).toBe(3)
+    expect(computeWeekRequirements('user1', '2026-W44', []).totalRequired).toBe(3)
   })
 
   it('forgives a missed week without touching any stat', () => {
@@ -132,9 +132,7 @@ describe("W42 perdonazo masivo and Javi's return", () => {
     expect(getHoliday(W42).name).toBe('Perdonazo masivo')
     for (const uid of ['user1', 'user3', 'user4']) expect(computeWeekRequirements(uid, W42, []).totalRequired).toBe(0)
     expect(computeWeekRequirements('user2', W42, []).paused).toBe(true)
-    for (const uid of ['user1', 'user2', 'user3', 'user4']) {
-      expect(computeWeekRequirements(uid, '2026-W43', []).totalRequired).toBe(3)
-    }
+    expect(computeWeekRequirements('user2', '2026-W43', []).paused).toBeFalsy()
   })
 
   it('forgives a missed week without touching any stat', () => {
@@ -145,16 +143,51 @@ describe("W42 perdonazo masivo and Javi's return", () => {
     expect(out.absenceUpdates).toEqual([])
   })
 
-  it("moves Jose's open W37 freeze deadline to W44", () => {
-    expect(getAbsenceRecoveryWindow(w37, [w37]).at(-1)).toBe('2026-W44')
+  it("moves Jose's open W37 freeze deadline past W42 and W43, to W45", () => {
+    expect(getAbsenceRecoveryWindow(w37, [w37]).at(-1)).toBe('2026-W45')
   })
 
-  it('leaves Javi nothing to repay in her first week back', () => {
+  it('leaves Javi nothing to repay after her return', () => {
     for (const a of [trip, w35]) expect(getAbsenceRecoveryWindow(a, [trip, w35]).every((w) => w < W42)).toBe(true)
-    const out = computeWeekEndOutcome({ weekId: '2026-W43', userIds: ['user2'], users: [javi], absences: [trip, w35],
-      weekWorkouts: Array.from({ length: 3 }, () => ({ userId: 'user2', weekId: '2026-W43' })),
-      weekJustifications: [], sessionsByUserWeek: { user2: { '2026-W43': 3 } } })
+    const out = computeWeekEndOutcome({ weekId: '2026-W44', userIds: ['user2'], users: [javi], absences: [trip, w35],
+      weekWorkouts: Array.from({ length: 3 }, () => ({ userId: 'user2', weekId: '2026-W44' })),
+      weekJustifications: [], sessionsByUserWeek: { user2: { '2026-W44': 3 } } })
     expect(out.absenceUpdates).toEqual([])
     expect(out.summaries[0].data).toMatchObject({ status: 'completed', fineApplied: 0, debtConsumed: 0 })
+  })
+})
+
+describe('W43 perdonazo masivo: sessions become extras', () => {
+  const W43 = '2026-W43'
+  const jose = { ...user, walletBalance: 20833, currentFineLevel: 5000, extraLives: 0,
+    consecutiveSuccesses: 0, hasShield: false, bankedExtras: 0 }
+  const javi = { id: 'user2', walletBalance: 8334, currentFineLevel: 5000, extraLives: 0,
+    consecutiveMisses: 0, consecutiveSuccesses: 0, hasShield: true, bankedExtras: 0 }
+  const w37 = { id: 'uo3ZXg', userId: 'user1', status: 'active', frozenWeeks: { '2026-W37': 2 }, createdAt: { seconds: 3 } }
+  const close = (u, count, absences = []) => computeWeekEndOutcome({ weekId: W43, userIds: [u.id], users: [u], absences,
+    weekWorkouts: Array.from({ length: count }, () => ({ userId: u.id, weekId: W43 })),
+    weekJustifications: [], sessionsByUserWeek: { [u.id]: { [W43]: count } } })
+  const after = (u, out) => Object.assign({}, u, ...out.userUpdates.map((x) => x.data))
+
+  it('covers 19–25 October 2026 and requires nothing from anyone, Javi included', () => {
+    expect(getWeekId('2026-10-19')).toBe(W43)
+    expect(getWeekId('2026-10-25')).toBe(W43)
+    expect(getHoliday(W43).name).toBe('Perdonazo masivo')
+    for (const uid of ['user1', 'user2', 'user3', 'user4']) expect(computeWeekRequirements(uid, W43, []).totalRequired).toBe(0)
+  })
+
+  it("uses Jose's 2 sessions to repay his W37 freeze, touching no stat", () => {
+    const out = close(jose, 2, [w37])
+    expect(out.summaries[0].data).toMatchObject({ status: 'holiday', fineApplied: 0, debtConsumed: 2, extrasBanked: 0 })
+    expect(after(jose, out)).toEqual(jose)
+    expect(out.absenceUpdates).toEqual([])
+    expect(simulateAutoRecovery([w37], { user1: { [W43]: 2 } }).remainingDebtByAbsence.uo3ZXg).toBe(0)
+  })
+
+  it("banks Javi's 2 sessions and keeps her shield", () => {
+    const out = close(javi, 2)
+    expect(out.summaries[0].data).toMatchObject({ status: 'holiday', fineApplied: 0, shieldBroken: false,
+      debtConsumed: 0, extrasBanked: 2, bankedExtrasAfter: 2 })
+    expect(after(javi, out)).toEqual({ ...javi, bankedExtras: 2 })
   })
 })

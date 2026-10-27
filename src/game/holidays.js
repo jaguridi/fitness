@@ -28,6 +28,15 @@ export const HOLIDAY_WEEKS = {
     recap: '¡Otro perdonazo masivo, familia! 🕊️ La semana del 12 al 18 de octubre tampoco fue fácil, así que acordamos dejarla libre: sin multas, sin tocar rachas ni niveles de multa, y sin nuevas sesiones por recuperar. Nadie alcanzó a registrar sesiones, así que quedó todo perdonado. 🙌 Y la mejor noticia: ¡Javi vuelve al juego esta semana! 🌱 Para que parta limpia, sus dos congelamientos antiguos (4 sesiones pendientes) también quedaron perdonados. Ahora sí, los cuatro de vuelta: a moverse en familia. 💪',
     revision: 'perdonazo-w42-2026',
   },
+  // Agreed after its close too (scripts/dev-only/apply-w43-perdonazo-2026.mjs).
+  // Unlike W41/W42, people trained: those sessions became extras.
+  '2026-W43': {
+    name: 'Perdonazo masivo',
+    emoji: '🕊️',
+    title: '🕊️ ¡Tercer perdonazo masivo!',
+    recap: '¡Tercer perdonazo masivo, familia! 🕊️ La semana del 19 al 25 de octubre también quedó libre: sin multas, sin tocar rachas, escudos ni niveles de multa, y sin nuevas sesiones por recuperar. Lo que sí se entrenó cuenta como extra: con sus 2 sesiones Jose terminó de pagar su congelamiento de la semana 37, y Javi, en su semana de regreso, sumó 2 extras al banco. 💪 ¡Bienvenida de vuelta, Javi! 🌱 Gonza y Fran, esta semana los esperamos con todo. ¡A moverse en familia!',
+    revision: 'perdonazo-w43-2026',
+  },
 }
 
 export const getHoliday = (weekId) => HOLIDAY_WEEKS[weekId] || null
