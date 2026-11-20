@@ -1,13 +1,14 @@
 {
-  "name": "FitFamily - Tracker de Ejercicio",
+  "name": "FitFamily",
   "short_name": "FitFamily",
-  "description": "Reto fitness familiar con multas, vidas y escudos",
+  "description": "Ejercicio, hábitos y logros en familia",
+  "lang": "es",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#030712",
-  "theme_color": "#4f46e5",
+  "background_color": "#f2f4f7",
+  "theme_color": "#f2f4f7",
   "icons": [
     {
       "src": "./avatars/jose.png",

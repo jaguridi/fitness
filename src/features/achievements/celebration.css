@@ -1,0 +1,179 @@
+/*
+ * La celebración de "pegar la lámina" (el único momento orquestado de la app).
+ *
+ * Línea de tiempo (ms):
+ *   0     aparece el panel; el hueco punteado con su número
+ *   500   la lámina entra "en la mano": levantada, inclinada, con sombra larga
+ *   ~1150 se presiona contra el hueco (aplastamiento), se asienta, el hueco desaparece
+ *   1150  floritura según rareza: anillos, papelitos, y en la legendaria rayos que giran
+ *   1250  nombre, rareza y descripción
+ */
+
+.celebrate-stage {
+  --land: 1150ms;
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 236px;
+  overflow: hidden;
+  isolation: isolate;
+}
+.celebrate-stage > * {
+  grid-area: 1 / 1;
+}
+
+/* El hueco del álbum */
+.celebrate-slot {
+  animation:
+    celebrate-slot-in 320ms var(--ease-out-soft) both,
+    celebrate-slot-out 160ms ease-out var(--land) both;
+}
+@keyframes celebrate-slot-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes celebrate-slot-out {
+  to { opacity: 0; }
+}
+
+/* La lámina: se despega de la mano, se presiona y se asienta */
+.celebrate-sticker {
+  position: relative;
+  z-index: 2;
+  transform-origin: 50% 60%;
+  animation: celebrate-peel-stick 760ms cubic-bezier(0.3, 0.6, 0.25, 1) 480ms both;
+}
+@keyframes celebrate-peel-stick {
+  0% {
+    opacity: 0;
+    transform: perspective(700px) translate(46px, -86px) rotateX(34deg) rotateY(-26deg) rotate(-18deg) scale(1.5);
+    filter: drop-shadow(22px 30px 16px rgb(14 21 40 / 0.32));
+  }
+  14% { opacity: 1; }
+  58% {
+    transform: perspective(700px) translate(8px, -14px) rotateX(14deg) rotateY(-8deg) rotate(-5deg) scale(1.14);
+    filter: drop-shadow(10px 14px 10px rgb(14 21 40 / 0.26));
+  }
+  /* presión: se aplasta contra la página */
+  80% {
+    transform: perspective(700px) translate(0, 3px) rotateX(0) rotateY(0) rotate(1deg) scale(1.07, 0.9);
+    filter: drop-shadow(0 0 0 rgb(14 21 40 / 0));
+  }
+  91% { transform: perspective(700px) translate(0, -2px) scale(0.98, 1.03); }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+
+/* Anillo de presión */
+.celebrate-ring {
+  z-index: 1;
+  width: 150px;
+  height: 150px;
+  border-radius: 9999px;
+  border: 3px solid var(--celebrate-accent);
+  opacity: 0;
+  animation: celebrate-ring 700ms var(--ease-out-soft) var(--land) forwards;
+}
+.celebrate-ring[data-second] {
+  animation-delay: calc(var(--land) + 140ms);
+  border-width: 2px;
+}
+@keyframes celebrate-ring {
+  0% { opacity: 0.85; transform: scale(0.7); }
+  100% { opacity: 0; transform: scale(1.7); }
+}
+
+/* Papelitos (formas planas, sin degradados) */
+.celebrate-bit {
+  z-index: 3;
+  width: var(--w, 8px);
+  height: var(--h, 8px);
+  border-radius: var(--br, 2px);
+  background: var(--c);
+  opacity: 0;
+  animation: celebrate-bit 820ms cubic-bezier(0.15, 0.7, 0.3, 1) calc(var(--land) + var(--delay, 0ms)) forwards;
+}
+@keyframes celebrate-bit {
+  0% { opacity: 1; transform: translate(0, 0) rotate(0) scale(0.6); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(var(--spin)) scale(1); }
+}
+
+/* Rayos detrás de la lámina (épica: un destello; legendaria: giran) */
+.celebrate-burst {
+  z-index: 0;
+  opacity: 0;
+  animation: celebrate-burst-in 520ms var(--ease-out-soft) var(--land) both;
+}
+.celebrate-burst > svg {
+  display: block;
+}
+.celebrate-stage[data-rarity="epica"] .celebrate-burst {
+  animation: celebrate-burst-flash 1100ms var(--ease-out-soft) var(--land) both;
+}
+.celebrate-stage[data-rarity="legendaria"] .celebrate-burst > svg {
+  animation: celebrate-spin 16s linear infinite;
+}
+@keyframes celebrate-burst-in {
+  from { opacity: 0; transform: scale(0.4); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes celebrate-burst-flash {
+  0% { opacity: 0; transform: scale(0.4); }
+  35% { opacity: 0.9; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.1); }
+}
+@keyframes celebrate-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Legendaria: un golpe seco del álbum al pegarla */
+.celebrate-stage[data-rarity="legendaria"] {
+  animation: celebrate-thump 420ms ease-out var(--land) both;
+}
+@keyframes celebrate-thump {
+  0%, 100% { transform: translateY(0); }
+  30% { transform: translateY(4px) scale(0.985); }
+  60% { transform: translateY(-1px); }
+}
+
+/* Texto y acciones */
+.celebrate-text {
+  animation: celebrate-up 360ms var(--ease-out-soft) 1250ms both;
+}
+.celebrate-actions {
+  animation: celebrate-up 360ms var(--ease-out-soft) 1380ms both;
+}
+@keyframes celebrate-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Movimiento reducido: un fundido simple, sin vuelo ni papelitos */
+@media (prefers-reduced-motion: reduce) {
+  .celebrate-panel {
+    animation: celebrate-fade 260ms ease-out both !important;
+    animation-duration: 260ms !important;
+  }
+  .celebrate-slot,
+  .celebrate-ring,
+  .celebrate-bit {
+    display: none;
+  }
+  .celebrate-sticker,
+  .celebrate-text,
+  .celebrate-actions,
+  .celebrate-burst,
+  .celebrate-stage {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+  .celebrate-burst > svg {
+    animation: none !important;
+  }
+}
+@keyframes celebrate-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

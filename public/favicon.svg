@@ -1,1 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">💪</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <g transform="rotate(-6 32 32)">
+    <rect x="9" y="11" width="46" height="46" rx="13" fill="#16203A" opacity=".25"/>
+    <rect x="6" y="7" width="46" height="46" rx="13" fill="#FFFFFF" stroke="#16203A" stroke-width="2.5"/>
+    <rect x="11" y="12" width="36" height="36" rx="9" fill="#F4511E"/>
+    <path d="M22 37V23h14M22 30h10" fill="none" stroke="#16203A" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

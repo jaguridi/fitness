@@ -1,116 +1,118 @@
-import { useEffect, useState } from 'react'
-import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
-import { Toaster } from 'sonner'
-import { Home, Camera, ChartColumn, CircleUser } from 'lucide-react'
-import { AuthProvider, useAuth } from './context/AuthContext'
-import useGameLogic from './hooks/useGameLogic'
-import { registerPushToken } from './services/notificationService'
-import OnboardingModal, { shouldShowOnboarding } from './components/OnboardingModal'
-import OfflineIndicator from './components/OfflineIndicator'
-import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import Feed from './pages/Feed'
-import UserDetail from './pages/UserDetail'
-import Admin from './pages/Admin'
-import Rules from './pages/Rules'
-import Stats from './pages/Stats'
-import Perfil from './pages/Perfil'
+import { useEffect } from 'react'
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
+import { AuthProvider, useAuth } from './auth/AuthContext'
+import { FamilyDataProvider, useFamily } from './data/FamilyDataProvider'
+import { Toaster, useThemeSync } from './components/ui'
+import BottomNav from './components/shell/BottomNav'
+import OfflineIndicator from './components/shell/OfflineIndicator'
+import { AppError, AppLoading } from './components/shell/AppStatus'
+import { LogSheetProvider, useLogSheet } from './features/log/LogSheetContext'
+import LogSheet from './features/log/LogSheet'
+import AchievementWatcher from './features/achievements/AchievementWatcher'
+import WelcomeGate from './features/profile/WelcomeGate'
+import LoginPage from './features/auth/LoginPage'
+import TodayPage from './features/today/TodayPage'
+import FeedPage from './features/feed/FeedPage'
+import AchievementsPage from './features/achievements/AchievementsPage'
+import ProfilePage from './features/profile/ProfilePage'
+import ArchivePage from './features/profile/ArchivePage'
+import WhatsNewPage from './features/profile/WhatsNewPage'
+import MemberPage from './features/member/MemberPage'
+import HabitsPage from './features/habits/HabitsPage'
+import StatsPage from './features/stats/StatsPage'
+import GoalsPage from './features/goals/GoalsPage'
 
-// Rules and Admin live inside Perfil, so the Perfil tab stays lit there too.
-const NAV_ITEMS = [
-  { to: '/', label: 'Inicio', icon: Home, match: ['/'] },
-  { to: '/feed', label: 'Feed', icon: Camera, match: ['/feed'] },
-  { to: '/stats', label: 'Stats', icon: ChartColumn, match: ['/stats'] },
-  { to: '/perfil', label: 'Perfil', icon: CircleUser, match: ['/perfil', '/rules', '/admin'] },
-]
+const IS_DEMO = import.meta.env.MODE === 'demo' || Boolean(import.meta.env.VITE_DEMO)
 
-function AppContent() {
-  const { isLoggedIn, loading: authLoading, currentUser } = useAuth()
-  const gameState = useGameLogic()
-  const [showOnboarding, setShowOnboarding] = useState(false)
+function LegacyUserRedirect() {
+  const { userId } = useParams()
+  return <Navigate to={`/u/${userId}`} replace />
+}
+
+/** En desarrollo, #/dev/ui se monta fuera de la app (main.jsx): recarga para llegar. */
+function DevGalleryReload() {
+  useEffect(() => {
+    window.location.reload()
+  }, [])
+  return null
+}
+
+/** Vuelve arriba al cambiar de pantalla (HashRouter no lo hace solo). */
+function ScrollToTop() {
   const { pathname } = useLocation()
-
-  // Show onboarding once per device after first login
   useEffect(() => {
-    if (isLoggedIn && currentUser && shouldShowOnboarding()) {
-      setShowOnboarding(true)
-    }
-  }, [isLoggedIn, currentUser?.id])
+    window.scrollTo(0, 0)
+  }, [pathname])
+  return null
+}
 
-  // If onboarding was skipped/done, still register push token silently
+function Shell() {
+  const { currentUser } = useAuth()
+  const { ready, error, actions } = useFamily()
+  const { openLog } = useLogSheet()
+
+  // Registro silencioso del token de notificaciones (nunca en modo demo).
   useEffect(() => {
-    if (!isLoggedIn || !currentUser || showOnboarding) return
-    const t = setTimeout(() => registerPushToken(currentUser.id), 3000)
+    if (IS_DEMO || !currentUser || !ready) return
+    const t = setTimeout(() => {
+      Promise.resolve(actions?.registerPush?.()).catch(() => {})
+    }, 3000)
     return () => clearTimeout(t)
-  }, [isLoggedIn, currentUser?.id, showOnboarding])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, ready])
 
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-4xl animate-bounce">💪</div>
-      </div>
-    )
-  }
-
-  if (!isLoggedIn) {
-    return <Login />
-  }
+  if (error) return <AppError error={error} />
+  if (!ready) return <AppLoading />
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
+    <>
+      <ScrollToTop />
       <OfflineIndicator />
-      {/* Main content */}
-      <main className="max-w-lg mx-auto px-4 pt-4 pb-[env(safe-area-inset-bottom)]">
+      <main className="mx-auto w-full max-w-md px-4 pt-safe pb-nav">
         <Routes>
-          <Route path="/" element={<Dashboard gameState={gameState} />} />
-          <Route path="/feed" element={<Feed />} />
-          <Route path="/user/:userId" element={<UserDetail gameState={gameState} />} />
-          <Route path="/admin" element={<Admin gameState={gameState} />} />
-          <Route path="/rules" element={<Rules />} />
-          <Route path="/stats" element={<Stats gameState={gameState} />} />
-          <Route path="/perfil" element={<Perfil gameState={gameState} />} />
+          <Route path="/" element={<TodayPage />} />
+          <Route path="/familia" element={<FeedPage />} />
+          <Route path="/logros" element={<AchievementsPage />} />
+          <Route path="/perfil" element={<ProfilePage />} />
+          <Route path="/u/:userId" element={<MemberPage />} />
+          <Route path="/habitos" element={<HabitsPage />} />
+          <Route path="/metas" element={<GoalsPage />} />
+          <Route path="/stats" element={<StatsPage />} />
+          <Route path="/archivo" element={<ArchivePage />} />
+          <Route path="/novedades" element={<WhatsNewPage />} />
+          <Route path="/feed" element={<Navigate to="/familia" replace />} />
+          <Route path="/user/:userId" element={<LegacyUserRedirect />} />
+          {import.meta.env.DEV && <Route path="/dev/ui" element={<DevGalleryReload />} />}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
+      <BottomNav userId={currentUser?.id} onLog={() => openLog()} />
+      <LogSheet />
+      <AchievementWatcher />
+      <WelcomeGate />
+    </>
+  )
+}
 
-      {/* Onboarding modal — shown once per device */}
-      {showOnboarding && currentUser && (
-        <OnboardingModal
-          userId={currentUser.id}
-          onDone={() => setShowOnboarding(false)}
-        />
-      )}
-
-      {/* Bottom navigation — safe-area padding keeps it above the iOS gesture bar */}
-      <nav className="fixed bottom-0 inset-x-0 bg-gray-900/95 backdrop-blur border-t border-gray-800 z-30 pb-[env(safe-area-inset-bottom)]">
-        <div className="max-w-lg mx-auto flex">
-          {NAV_ITEMS.map(({ to, label, icon: Icon, match }) => {
-            const active = match.some((p) =>
-              p === '/' ? pathname === '/' : pathname.startsWith(p)
-            )
-            return (
-              <NavLink
-                key={to}
-                to={to}
-                className={`flex-1 py-3 text-center text-sm font-medium transition-colors ${
-                  active ? 'text-indigo-400' : 'text-gray-500 hover:text-gray-300'
-                }`}
-              >
-                <Icon size={22} strokeWidth={active ? 2.4 : 2} className="mx-auto" aria-hidden="true" />
-                <div className="mt-0.5">{label}</div>
-              </NavLink>
-            )
-          })}
-        </div>
-      </nav>
-    </div>
+function AuthGate() {
+  const { isLoggedIn, loading } = useAuth()
+  if (loading) return <AppLoading label="Abriendo FitFamily" />
+  if (!isLoggedIn) return <LoginPage />
+  return (
+    <FamilyDataProvider>
+      <LogSheetProvider>
+        <Shell />
+      </LogSheetProvider>
+    </FamilyDataProvider>
   )
 }
 
 export default function App() {
+  useThemeSync()
   return (
     <AuthProvider>
-      <Toaster theme="dark" position="top-center" richColors />
-      <AppContent />
+      <Toaster />
+      <AuthGate />
     </AuthProvider>
   )
 }

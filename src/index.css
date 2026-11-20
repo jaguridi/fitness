@@ -1,22 +1,505 @@
+/*
+ * FitFamily v2 — sistema de diseño "el álbum de la familia" (docs/V2_PLAN.md §6).
+ *
+ * Papel y tinta tranquilos; lo audaz son las láminas y el color de cada persona.
+ *
+ * Uso rápido (todo como utilidades de Tailwind, nunca hex ni gray-800):
+ *   fondos      bg-paper · bg-surface · bg-surface-sunk · bg-ink · bg-done · bg-done-soft
+ *   texto       text-ink · text-ink-soft · text-ink-faint · text-on-ink · text-done-ink
+ *   bordes      border-line · border-line-strong
+ *   persona     data-member="user1" en un contenedor → bg-member · bg-member-tint ·
+ *               text-member-ink · text-on-member · border-member · ring-member
+ *               (sin data-member, "member" cae en tinta)
+ *   tipo        type-display · type-title · type-heading · type-sub · type-body · type-small · type-caption
+ *               + tabular-nums para cifras
+ *   radios      rounded-surface (20) · rounded-control (12) · rounded-sheet (28) · rounded-full (chips)
+ *   sombras     shadow-sticker (dura, desplazada) · shadow-lift (hojas/menús) · shadow-fab (botón +)
+ *   área segura pt-safe · pb-safe · pb-nav (deja espacio a la barra inferior)
+ *   animación   animate-stick · animate-pop · animate-sheet-up · animate-fade-in · animate-shake
+ */
 @import "tailwindcss";
+@import "@fontsource-variable/bricolage-grotesque/opsz.css";
 
-@keyframes confettiFall {
-  0% {
-    transform: translateY(0) rotate(0deg) scale(1);
-    opacity: 1;
+/* `dark:` sigue al tema real (sistema o forzado con data-theme). Casi nunca hace
+   falta: los tokens ya cambian solos. */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
   }
-  80% {
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(110vh) rotate(720deg) scale(0.4);
-    opacity: 0;
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]) *):not(:where([data-theme="light"], [data-theme="light"] *)) {
+      @slot;
+    }
   }
 }
 
-.confetti-piece {
-  position: fixed;
-  animation: confettiFall linear forwards;
-  pointer-events: none;
-  z-index: 110;
+/* ── Tema: tinta y papel ─────────────────────────────────────────────── */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --paper: #f2f4f7;
+  --surface: #ffffff;
+  --surface-sunk: #e8ebf0;
+  --ink: #16203a;
+  --ink-soft: #5b6478;
+  --ink-faint: #8a93a6;
+  --line: #dce1e8;
+  --line-strong: #c3cad5;
+  --on-ink: #ffffff;
+  --done: #1fa35c;
+  --done-ink: #137a43;
+  --danger: #b4232c;
+  --focus: #16203a;
+  --scrim: rgb(14 21 40 / 0.45);
+  --sticker-edge: #ffffff;
+  --sticker-shadow: rgb(22 32 58 / 0.22);
+
+  /* Personas: color, texto legible sobre papel/superficie, texto sobre el color sólido */
+  --m-user1: #f4511e; /* Jose, naranja */
+  --m-user1-ink: #c2380e;
+  --m-user1-on: #16203a;
+  --m-user2: #00a6a6; /* Javi, turquesa */
+  --m-user2-ink: #007a7a;
+  --m-user2-on: #16203a;
+  --m-user3: #2563eb; /* Gonza, azul */
+  --m-user3-ink: #2563eb;
+  --m-user3-on: #ffffff;
+  --m-user4: #f5b700; /* Fran, amarillo */
+  --m-user4-ink: #8a6500;
+  --m-user4-on: #16203a;
+
+  /* Rareza de láminas. --rar-X: el "papel" de la lámina; --rar-X-print: la tinta impresa
+     sobre ella (rayos, puntos, marco). Las láminas son objetos: iguales en ambos temas.
+     --rar-X-ink: texto de la rareza sobre papel/superficie (sí cambia con el tema). */
+  --rar-comun: #bdeccd;
+  --rar-comun-print: #66c890;
+  --rar-comun-ink: #23784a;
+  --rar-rara: #5fb6f3;
+  --rar-rara-print: #2f8ad8;
+  --rar-rara-ink: #1d6aa8;
+  --rar-epica: #b483f2;
+  --rar-epica-print: #8a52dd;
+  --rar-epica-ink: #7038c4;
+  --rar-legendaria: #ffc93d;
+  --rar-legendaria-print: #f39200;
+  --rar-legendaria-ink: #94600a;
+  --tint-strength: 16%;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #0e1528;
+    --surface: #18223a;
+    --surface-sunk: #222d49;
+    --ink: #eef1f6;
+    --ink-soft: #a3acbf;
+    --ink-faint: #6f7a91;
+    --line: #2a3653;
+    --line-strong: #3a4769;
+    --on-ink: #0e1528;
+    --done: #34c47a;
+    --done-ink: #4fd68f;
+  --danger: #ff8a8a;
+    --focus: #eef1f6;
+    --scrim: rgb(4 8 18 / 0.66);
+    --sticker-edge: #f6f7fa;
+    --sticker-shadow: rgb(0 0 0 / 0.45);
+    --m-user1: #ff6a3d;
+    --m-user1-ink: #ff8a66;
+    --m-user1-on: #16203a;
+    --m-user2: #1cc2c2;
+    --m-user2-ink: #3fd4d4;
+    --m-user2-on: #0e1528;
+    --m-user3: #5b8cff;
+    --m-user3-ink: #84a8ff;
+    --m-user3-on: #0e1528;
+    --m-user4: #ffc933;
+    --m-user4-ink: #ffd666;
+    --m-user4-on: #16203a;
+    --rar-comun-ink: #6fd69c;
+    --rar-rara-ink: #7cc4ee;
+    --rar-epica-ink: #c39cf0;
+    --rar-legendaria-ink: #ffd166;
+    --tint-strength: 24%;
+  }
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #0e1528;
+  --surface: #18223a;
+  --surface-sunk: #222d49;
+  --ink: #eef1f6;
+  --ink-soft: #a3acbf;
+  --ink-faint: #6f7a91;
+  --line: #2a3653;
+  --line-strong: #3a4769;
+  --on-ink: #0e1528;
+  --done: #34c47a;
+  --done-ink: #4fd68f;
+  --danger: #ff8a8a;
+  --focus: #eef1f6;
+  --scrim: rgb(4 8 18 / 0.66);
+  --sticker-edge: #f6f7fa;
+  --sticker-shadow: rgb(0 0 0 / 0.45);
+  --m-user1: #ff6a3d;
+  --m-user1-ink: #ff8a66;
+  --m-user1-on: #16203a;
+  --m-user2: #1cc2c2;
+  --m-user2-ink: #3fd4d4;
+  --m-user2-on: #0e1528;
+  --m-user3: #5b8cff;
+  --m-user3-ink: #84a8ff;
+  --m-user3-on: #0e1528;
+  --m-user4: #ffc933;
+  --m-user4-ink: #ffd666;
+  --m-user4-on: #16203a;
+  --rar-comun-ink: #6fd69c;
+  --rar-rara-ink: #7cc4ee;
+  --rar-epica-ink: #c39cf0;
+  --rar-legendaria-ink: #ffd166;
+  --tint-strength: 24%;
+}
+
+/* Derivados: se recalculan en cada subárbol con tema propio (la galería muestra ambos). */
+:root,
+[data-theme] {
+  --done-soft: color-mix(in oklab, var(--done) var(--tint-strength), var(--surface));
+  --m-user1-tint: color-mix(in oklab, var(--m-user1) var(--tint-strength), var(--surface));
+  --m-user2-tint: color-mix(in oklab, var(--m-user2) var(--tint-strength), var(--surface));
+  --m-user3-tint: color-mix(in oklab, var(--m-user3) var(--tint-strength), var(--surface));
+  --m-user4-tint: color-mix(in oklab, var(--m-user4) var(--tint-strength), var(--surface));
+  --member: var(--ink);
+  --member-ink: var(--ink);
+  --member-on: var(--on-ink);
+  --member-tint: var(--surface-sunk);
+}
+
+/* Color de persona por contexto: <div data-member="user3"> … */
+[data-member="user1"] { --member: var(--m-user1); --member-ink: var(--m-user1-ink); --member-on: var(--m-user1-on); --member-tint: var(--m-user1-tint); }
+[data-member="user2"] { --member: var(--m-user2); --member-ink: var(--m-user2-ink); --member-on: var(--m-user2-on); --member-tint: var(--m-user2-tint); }
+[data-member="user3"] { --member: var(--m-user3); --member-ink: var(--m-user3-ink); --member-on: var(--m-user3-on); --member-tint: var(--m-user3-tint); }
+[data-member="user4"] { --member: var(--m-user4); --member-ink: var(--m-user4-ink); --member-on: var(--m-user4-on); --member-tint: var(--m-user4-tint); }
+
+/* ── Tokens expuestos a Tailwind ─────────────────────────────────────── */
+
+@theme inline {
+  --font-sans: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-surface-sunk: var(--surface-sunk);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-on-ink: var(--on-ink);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-done: var(--done);
+  --color-done-ink: var(--done-ink);
+  --color-done-soft: var(--done-soft);
+  --color-danger: var(--danger);
+  --color-focus: var(--focus);
+  --color-scrim: var(--scrim);
+
+  --color-member: var(--member);
+  --color-member-ink: var(--member-ink);
+  --color-on-member: var(--member-on);
+  --color-member-tint: var(--member-tint);
+
+  --color-m-user1: var(--m-user1);
+  --color-m-user2: var(--m-user2);
+  --color-m-user3: var(--m-user3);
+  --color-m-user4: var(--m-user4);
+}
+
+@theme {
+  /* Escala tipográfica 12 / 14 / 16 / 20 / 26 / 34 / 44 */
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.625rem;
+  --text-xl: 1.625rem;
+  --text-xl--line-height: 1.875rem;
+  --text-2xl: 2.125rem;
+  --text-2xl--line-height: 2.375rem;
+  --text-3xl: 2.75rem;
+  --text-3xl--line-height: 2.875rem;
+
+  --radius-control: 12px;
+  --radius-surface: 20px;
+  --radius-sheet: 28px;
+
+  --shadow-sticker: 2px 3px 0 var(--sticker-shadow);
+  --shadow-lift: 0 -1px 0 var(--line), 0 18px 48px -12px rgb(14 21 40 / 0.35);
+  --shadow-fab: 0 3px 0 color-mix(in oklab, var(--ink) 35%, transparent);
+
+  --ease-snap: cubic-bezier(0.2, 0.9, 0.25, 1.15);
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --animate-stick: stick 620ms var(--ease-snap) both;
+  --animate-pop: pop 260ms var(--ease-snap);
+  --animate-sheet-up: sheet-up 320ms var(--ease-out-soft) both;
+  --animate-dialog-in: dialog-in 220ms var(--ease-out-soft) both;
+  --animate-fade-in: fade-in 200ms ease-out both;
+  --animate-shake: shake 360ms ease-in-out;
+  --animate-skeleton: skeleton 1.6s ease-in-out infinite;
+  --animate-loading-dot: loading-dot 1.1s ease-in-out infinite;
+
+  @keyframes stick {
+    0% { opacity: 0; transform: translateY(-18px) scale(1.35) rotate(calc(var(--rot, 0deg) - 14deg)); }
+    55% { opacity: 1; transform: translateY(2px) scale(0.94) rotate(calc(var(--rot, 0deg) + 2deg)); }
+    78% { transform: translateY(0) scale(1.03) rotate(var(--rot, 0deg)); }
+    100% { opacity: 1; transform: translateY(0) scale(1) rotate(var(--rot, 0deg)); }
+  }
+  @keyframes pop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.22); }
+    100% { transform: scale(1); }
+  }
+  @keyframes sheet-up {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  @keyframes dialog-in {
+    from { opacity: 0; transform: translateY(12px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-8px); }
+    40% { transform: translateX(7px); }
+    60% { transform: translateX(-5px); }
+    80% { transform: translateX(3px); }
+  }
+  @keyframes loading-dot {
+    0%, 60%, 100% { transform: translateY(0); }
+    30% { transform: translateY(-8px); }
+  }
+  @keyframes skeleton {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
+}
+
+/* ── Tipografía semántica ────────────────────────────────────────────── */
+
+@utility type-display {
+  font-size: var(--text-3xl);
+  line-height: 1.02;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+@utility type-title {
+  font-size: var(--text-2xl);
+  line-height: 1.06;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+@utility type-heading {
+  font-size: var(--text-xl);
+  line-height: 1.12;
+  font-weight: 700;
+  letter-spacing: -0.022em;
+  text-wrap: balance;
+}
+@utility type-sub {
+  font-size: var(--text-lg);
+  line-height: 1.25;
+  font-weight: 650;
+  letter-spacing: -0.012em;
+}
+@utility type-body {
+  font-size: var(--text-base);
+  line-height: 1.5;
+  font-weight: 420;
+}
+@utility type-small {
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  font-weight: 450;
+}
+@utility type-caption {
+  font-size: var(--text-xs);
+  line-height: 1.3;
+  font-weight: 550;
+}
+
+/* ── Áreas seguras ───────────────────────────────────────────────────── */
+
+@utility pt-safe {
+  padding-top: max(env(safe-area-inset-top), 0px);
+}
+@utility pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}
+@utility pb-nav {
+  /* barra inferior (72px) + el botón + que sobresale + área segura */
+  padding-bottom: calc(6.5rem + env(safe-area-inset-bottom));
+}
+@utility px-safe {
+  padding-left: max(env(safe-area-inset-left), 0px);
+  padding-right: max(env(safe-area-inset-right), 0px);
+}
+
+/* ── Base ────────────────────────────────────────────────────────────── */
+
+@layer base {
+  html {
+    background: var(--paper);
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: 1.5;
+    font-optical-sizing: auto;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  button,
+  [role="button"] {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--member) 35%, transparent);
+  }
+
+  /* Foco visible solo con teclado, en tinta (no un azul genérico). */
+  :focus-visible {
+    outline: 2.5px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+}
+
+/* ── Láminas ─────────────────────────────────────────────────────────── */
+/* El SVG lo dibuja <Sticker>; aquí va lo que es material: sombra dura,
+   rotación determinista, brillo holográfico y el hueco punteado. */
+
+.sticker {
+  --rot: 0deg;
+  position: relative;
+  display: inline-block;
+  transform: rotate(var(--rot));
+  /* sombra dura de lámina pegada + un leve contacto suave */
+  filter: drop-shadow(var(--shadow-sticker)) drop-shadow(0 1px 2px rgb(22 32 58 / 0.12));
+  transition: transform 180ms var(--ease-out-soft);
+}
+.sticker[data-interactive="true"]:hover {
+  transform: rotate(var(--rot)) translateY(-2px) scale(1.03);
+}
+.sticker-comun { --stk-fill: var(--rar-comun); --stk-print: var(--rar-comun-print); --stk-print-opacity: 0.55; }
+.sticker-rara { --stk-fill: var(--rar-rara); --stk-print: var(--rar-rara-print); --stk-print-opacity: 0.5; }
+.sticker-epica { --stk-fill: var(--rar-epica); --stk-print: var(--rar-epica-print); --stk-print-opacity: 0.5; }
+.sticker-legendaria { --stk-fill: var(--rar-legendaria); --stk-print: var(--rar-legendaria-print); --stk-print-opacity: 0.55; }
+.sticker-fill {
+  fill: var(--stk-fill, var(--rar-comun));
+}
+.sticker-print {
+  fill: var(--stk-print, var(--rar-comun-print));
+  opacity: var(--stk-print-opacity, 0.5);
+}
+.sticker-frame {
+  fill: none;
+  stroke: #ffffff;
+  stroke-opacity: 0.6;
+  stroke-width: 2.4;
+  stroke-dasharray: none;
+}
+.sticker-legendaria .sticker-frame {
+  stroke: var(--rar-legendaria-print);
+  stroke-opacity: 0.9;
+  stroke-width: 3;
+}
+.sticker-edge {
+  fill: var(--sticker-edge);
+  stroke: var(--sticker-edge);
+  stroke-linejoin: round;
+}
+.sticker-slot {
+  fill: color-mix(in oklab, var(--surface-sunk) 70%, transparent);
+  stroke: var(--line-strong);
+  stroke-dasharray: 5 5;
+  stroke-linecap: round;
+  stroke-width: 2.5;
+}
+/* Holográfico de la legendaria: arcoíris saturado mezclado sobre el oro (luz dura: el oro
+   sigue ahí, pero vira a rosa y verde al moverse),
+   y un destello que cruza la lámina cada tanto. */
+.sticker-holo {
+  mix-blend-mode: hard-light;
+  opacity: 0.42;
+  animation: holo-drift 5s ease-in-out infinite alternate;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+.sticker-sheen {
+  mix-blend-mode: soft-light;
+  animation: holo-sheen 3.6s ease-in-out infinite;
+  animation-delay: 0.6s;
+  transform: translateX(-130px);
+}
+.sticker-sparks {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: holo-twinkle 2.4s ease-in-out infinite;
+}
+@keyframes holo-drift {
+  from { transform: translate(-14%, -6%) rotate(0deg); }
+  to { transform: translate(14%, 6%) rotate(10deg); }
+}
+@keyframes holo-sheen {
+  0% { transform: translateX(-130px); }
+  45%, 100% { transform: translateX(130px); }
+}
+@keyframes holo-twinkle {
+  0%, 100% { opacity: 0.95; }
+  50% { opacity: 0.45; }
+}
+
+/* Anillo segmentado: llenado suave al registrar */
+.ring-seg {
+  transition: stroke 300ms ease, opacity 300ms ease;
+}
+
+/* ── Movimiento reducido ─────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .sticker-holo,
+  .sticker-sheen,
+  .sticker-sparks {
+    animation: none;
+  }
 }

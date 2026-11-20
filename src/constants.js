@@ -27,35 +27,44 @@ export const USERS = [
 ]
 
 /**
- * Get the mood-appropriate avatar for a user based on their game state.
- * - happy: has shield OR streak >= 3
- * - sad: has fines AND streak is 0 AND consecutiveMisses > 0
- * - normal: everything else
+ * Mood-appropriate avatar for a member.
+ * @param {object} userConst  entry from USERS
+ * @param {'happy'|'normal'|'sad'} [mood='normal']  computed by the selectors
+ *   (src/data/selectors.js → getMemberWeek().mood)
+ * @returns {string} image path or emoji
  */
-export function getAvatarForMood(userConst, userFirestore) {
+export function getAvatarForMood(userConst, mood = 'normal') {
   if (!userConst?.avatarMoods) return userConst?.avatar || '🏃'
-
-  const streak = userFirestore?.consecutiveSuccesses || 0
-  const hasShield = userFirestore?.hasShield || false
-  const misses = userFirestore?.consecutiveMisses || 0
-  const fines = userFirestore?.walletBalance || 0
-
-  if (hasShield || streak >= 3) return userConst.avatarMoods.happy
-  if (misses > 0 && fines > 0) return userConst.avatarMoods.sad
-  return userConst.avatarMoods.normal
+  return userConst.avatarMoods[mood] || userConst.avatarMoods.normal || userConst.avatar
 }
 
 // Game rules live in src/game/constants.js (pure module shared with Cloud
-// Functions); re-exported here so UI imports keep working unchanged.
+// Functions); re-exported here for UI convenience.
 export {
-  WEEKLY_GOAL,
-  BASE_FINE,
-  MAX_FINE,
-  EXTRA_LIFE_THRESHOLD,
-  MAX_LIVES_PER_WEEK,
-  EXTRAS_PER_FINE_REDEMPTION,
-  FINE_REDEMPTION_AMOUNT,
+  DEFAULT_WEEKLY_GOAL,
+  MIN_WEEKLY_GOAL,
+  MAX_WEEKLY_GOAL,
+  MIN_HABIT_TARGET,
+  MAX_HABIT_TARGET,
+  V2_START_WEEK,
 } from './game/constants.js'
+
+// Habit suggestions shown when creating a habit (name, emoji, days per week).
+export const HABIT_SUGGESTIONS = [
+  { name: 'Leer', emoji: '📚', targetPerWeek: 5 },
+  { name: 'Meditar', emoji: '🧘', targetPerWeek: 7 },
+  { name: 'Tomar agua', emoji: '💧', targetPerWeek: 7 },
+  { name: 'Dormir 7 h', emoji: '😴', targetPerWeek: 5 },
+  { name: 'Estirar', emoji: '🤸', targetPerWeek: 4 },
+  { name: 'Sin azúcar', emoji: '🍬', targetPerWeek: 5 },
+  { name: 'Sin pantallas antes de dormir', emoji: '📵', targetPerWeek: 5 },
+  { name: 'Caminar', emoji: '🚶', targetPerWeek: 5 },
+  { name: 'Comer fruta', emoji: '🍎', targetPerWeek: 7 },
+  { name: 'Escribir un diario', emoji: '✍️', targetPerWeek: 3 },
+]
+
+// Reactions offered on feed items.
+export const REACTION_EMOJIS = ['🔥', '💪', '👏', '😍', '😂', '🎉']
 
 // Exercise types
 export const EXERCISE_TYPES = [
@@ -124,7 +133,7 @@ export function getTotalPoints(workouts) {
   return workouts.reduce((sum, w) => sum + getWorkoutPoints(w), 0)
 }
 
-// Format CLP
+// Format CLP (used by the read-only Archivo page of the fines season)
 export const formatCLP = (amount) => {
   return new Intl.NumberFormat('es-CL', {
     style: 'currency',

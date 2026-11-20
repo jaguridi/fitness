@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { resolve } from 'path'
 import { tmpdir } from 'os'
+import { configDefaults } from 'vitest/config'
 
 // Base path differs per host:
 //   '/'         → Vercel custom domain (fitness.jaguridi.cl), served at root.
@@ -45,4 +46,9 @@ export default defineConfig({
   ],
   base: BASE,
   cacheDir: resolve(tmpdir(), '.vite-fitness'),
+  test: {
+    // functions/ has its own node:test suite (cd functions && npm test);
+    // .claude/ holds agent worktrees with duplicate copies of the repo.
+    exclude: [...configDefaults.exclude, '.claude/**', 'functions/**'],
+  },
 })

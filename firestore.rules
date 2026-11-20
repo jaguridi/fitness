@@ -1,13 +1,18 @@
 rules_version = '2';
 
-// FitFamily — Firestore security rules.
+// FitFamily v2 — Firestore security rules.
 //
 // HONEST LIMITATION: the app authenticates with a per-user PIN, not Firebase
-// Auth, so these rules cannot distinguish family members from each other.
-// What they DO provide:
-//   - Only the collections the app actually uses exist; everything else is denied.
-//   - Documents can't be deleted except where the app legitimately deletes them.
-//   - Basic shape validation on the financially sensitive writes.
+// Auth, so these rules cannot tell family members apart: anyone holding the
+// public web config can act as any of the four users. What they DO provide:
+//   - Only the collections the v2 app uses accept writes; everything else is denied.
+//   - No deletes except workouts (owners delete their own in the app).
+//   - Shape validation and key whitelists, so a buggy or stale client can't
+//     write garbage or touch fields it never writes.
+//   - The v1 fines archive (absences, justifications, flagged_workouts) is
+//     read-only, and the v1 week-close lock can only stay parked, so a stale
+//     cached v1 client can never charge a fine or alter the archive again.
+// Cloud Functions use the Admin SDK and bypass these rules.
 // Upgrading to Firebase Auth (anonymous + custom claims) would allow real
 // per-user enforcement; until then this limits blast radius, not identity.
 
@@ -18,71 +23,176 @@ service cloud.firestore {
       return id in ['user1', 'user2', 'user3', 'user4'];
     }
 
-    // Users: game state + push tokens + pin hash. No deletes.
+    function data() {
+      return request.resource.data;
+    }
+
+    // Keys changed by an update (added, removed or modified).
+    function changed() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    function unchanged(field) {
+      return request.resource.data.get(field, null) == resource.data.get(field, null);
+    }
+
+    function isWeekId(v) {
+      return v is string && v.matches('^[0-9]{4}-W[0-9]{2}$');
+    }
+
+    function isYMD(v) {
+      return v is string && v.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    function isVisibility(v) {
+      return v in ['family', 'private'];
+    }
+
+    function optString(d, field, maxLen) {
+      return !(field in d) || (d[field] is string && d[field].size() <= maxLen);
+    }
+
+    // Reactions/comments carried by workouts, unlocks, goals and week posts.
+    function validSocial(d) {
+      return (!('reactions' in d) || d.reactions is map)
+        && (!('comments' in d) || d.comments is list);
+    }
+
+    // ── Users: profile, weeklyGoal, restWeeks, prefs, PIN hash, push tokens.
+    //    Unchanged from v1: create/update for known ids, no deletes.
     match /users/{userId} {
       allow read: if true;
       allow create, update: if isKnownUser(userId);
       allow delete: if false;
     }
 
-    // Workouts: created by the logger, edited within the 24h window,
-    // deleted only via the flag&vote flow.
+    // ── Workouts: photo mandatory on create; whitelisted edits; owners delete.
     match /workouts/{workoutId} {
       allow read: if true;
-      allow create: if isKnownUser(request.resource.data.userId)
-        && request.resource.data.weekId is string
-        && request.resource.data.date is string
-        && request.resource.data.duration is number
-        && request.resource.data.duration > 0
-        && request.resource.data.duration <= 300;
-      allow update: if request.resource.data.userId == resource.data.userId
-        && request.resource.data.weekId == resource.data.weekId
-        && request.resource.data.date == resource.data.date
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
-          ['duration', 'calories', 'description', 'exerciseType', 'comments', 'reactions']
-        );
-      allow delete: if true; // flag&vote resolution deletes fake workouts
+      allow create: if isKnownUser(data().userId)
+        && data().weekId is string
+        && data().date is string
+        && data().duration is number
+        && data().duration > 0
+        && data().duration <= 300
+        && data().photoURL is string
+        && data().photoURL.size() > 0
+        && validSocial(data());
+      allow update: if unchanged('userId')
+        && unchanged('weekId')
+        && unchanged('date')
+        && changed().hasOnly(
+          ['duration', 'calories', 'description', 'exerciseType', 'photoURL', 'comments', 'reactions']
+        )
+        // A photo edit must leave a photo (updateWorkout can't remove it).
+        && (!changed().hasAny(['photoURL']) || (data().photoURL is string && data().photoURL.size() > 0))
+        && (!changed().hasAny(['duration']) || (data().duration is number && data().duration > 0 && data().duration <= 300))
+        && validSocial(data());
+      allow delete: if true; // the owner deletes their own workout in the app
     }
 
-    // Weekly summaries: written by the week-end close (client or Cloud Function).
+    // ── Weekly summaries: written by the week close (client fallback or Cloud Function).
     match /weekly_summaries/{summaryId} {
       allow read: if true;
-      allow create, update: if isKnownUser(request.resource.data.userId);
+      allow create, update: if isKnownUser(data().userId)
+        && isWeekId(data().weekId)
+        && summaryId == data().userId + '_' + data().weekId;
       allow delete: if false;
     }
 
-    // Absences (frozen weeks): managed in the Absence Planner.
-    match /absences/{absenceId} {
-      allow read: if true;
-      allow create: if isKnownUser(request.resource.data.userId);
-      allow update: if true;
-      allow delete: if true; // planner allows removing a planned absence
+    // ── Habits (v2): never deleted, only archived.
+    function validHabit(d) {
+      return d.name is string && d.name.size() > 0 && d.name.size() <= 100
+        && optString(d, 'emoji', 64)
+        && d.targetPerWeek is number && d.targetPerWeek >= 1 && d.targetPerWeek <= 7
+        && isVisibility(d.get('visibility', 'family'))
+        && d.get('archived', false) is bool
+        && d.get('order', 0) is number;
     }
 
-    // Justifications: created by the owner, votes update the votes map.
-    match /justifications/{justificationId} {
+    match /habits/{habitId} {
       allow read: if true;
-      allow create: if isKnownUser(request.resource.data.userId);
-      allow update: if true;
+      allow create: if isKnownUser(data().userId)
+        && data().keys().hasOnly(['userId', 'name', 'emoji', 'targetPerWeek', 'visibility', 'archived', 'order', 'createdAt'])
+        && validHabit(data());
+      allow update: if unchanged('userId')
+        && changed().hasOnly(['name', 'emoji', 'targetPerWeek', 'visibility', 'archived', 'order'])
+        && validHabit(data());
       allow delete: if false;
     }
 
-    // Flagged workouts (flag & vote).
-    match /flagged_workouts/{workoutId} {
+    // ── Habit checks (v2): habit_weeks/{userId}_{weekId}.
+    function validHabitWeek(d, docId) {
+      return isKnownUser(d.userId)
+        && isWeekId(d.weekId)
+        && docId == d.userId + '_' + d.weekId
+        && d.keys().hasOnly(['userId', 'weekId', 'checks', 'updatedAt'])
+        && d.get('checks', {}) is map;
+    }
+
+    match /habit_weeks/{habitWeekId} {
       allow read: if true;
-      allow create: if isKnownUser(request.resource.data.flaggedBy);
-      allow update: if true;
+      allow create: if validHabitWeek(data(), habitWeekId);
+      allow update: if validHabitWeek(data(), habitWeekId) && unchanged('userId') && unchanged('weekId');
       allow delete: if false;
     }
 
-    // Achievement unlocks (feed items).
+    // ── Personal goals (v2): never deleted; status in the allowed set.
+    function validGoal(d) {
+      return d.title is string && d.title.size() > 0 && d.title.size() <= 140
+        && d.status in ['active', 'achieved', 'missed', 'cancelled']
+        && d.get('kind', 'manual') in ['auto', 'manual']
+        && (!('metric' in d) || d.metric in ['sessions', 'minutes', 'calories', 'habit'])
+        && (!('target' in d) || (d.target is number && d.target >= 0))
+        && (!('progress' in d) || (d.progress is number && d.progress >= 0))
+        && (!('startDate' in d) || isYMD(d.startDate))
+        && (!('endDate' in d) || isYMD(d.endDate))
+        && optString(d, 'emoji', 64)
+        && optString(d, 'reward', 300)
+        && optString(d, 'unit', 40)
+        && isVisibility(d.get('visibility', 'family'))
+        && validSocial(d);
+    }
+
+    match /goals/{goalId} {
+      allow read: if true;
+      allow create: if isKnownUser(data().userId)
+        && data().status == 'active'
+        && data().keys().hasOnly(['userId', 'title', 'emoji', 'kind', 'metric', 'exerciseType', 'habitId',
+          'target', 'unit', 'progress', 'startDate', 'endDate', 'reward', 'visibility', 'status', 'createdAt'])
+        && validGoal(data());
+      allow update: if unchanged('userId')
+        && changed().hasOnly(['title', 'emoji', 'kind', 'metric', 'exerciseType', 'habitId', 'target', 'unit',
+          'progress', 'startDate', 'endDate', 'reward', 'visibility', 'status', 'achievedAt', 'reactions', 'comments'])
+        && validGoal(data());
+      allow delete: if false;
+    }
+
+    // ── Weekly result posts (v2): written by the week close, plus reactions/comments.
+    match /week_posts/{weekId} {
+      allow read: if true;
+      allow create: if isWeekId(weekId)
+        && data().weekId == weekId
+        && data().results is list
+        && data().keys().hasOnly(['weekId', 'v', 'results', 'createdAt', 'updatedAt', 'reactions', 'comments'])
+        && validSocial(data());
+      allow update: if unchanged('weekId')
+        && changed().hasOnly(['v', 'results', 'updatedAt', 'reactions', 'comments'])
+        && data().results is list
+        && validSocial(data());
+      allow delete: if false;
+    }
+
+    // ── Achievement unlocks (sticker album): create once; others only react/comment.
     match /achievement_unlocks/{unlockId} {
       allow read: if true;
-      allow create: if isKnownUser(request.resource.data.userId);
-      allow update, delete: if false;
+      allow create: if isKnownUser(data().userId)
+        && unlockId == data().userId + '_' + data().achievementId;
+      allow update: if changed().hasOnly(['reactions', 'comments']) && validSocial(data());
+      allow delete: if false;
     }
 
-    // AI recaps: generated by Cloud Functions (admin SDK bypasses rules).
+    // ── AI recaps: generated by Cloud Functions (Admin SDK bypasses rules).
     match /weekly_recaps/{weekId} {
       allow read: if true;
       allow write: if false;
@@ -92,17 +202,39 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // App meta: the week-end processing lock lives here.
-    // customSports: family-shared list of extra exercise types added in-app.
-    match /settings/{docId} {
-      allow read: if true;
-      allow write: if docId == 'meta'
-        || (docId == 'customSports'
-            && request.resource.data.keys().hasOnly(['list'])
-            && request.resource.data.list is list);
+    // ── settings/meta: v2 close lock (v2LastClosedWeekId + v2Processing) and the
+    //    parked v1 lock, which may only ever be set to '9999-W99' from a client.
+    //    settings/customSports: family-shared list of extra exercise types.
+    function v1LockStaysParked() {
+      return !('lastAutoProcessedWeekId' in data()) || data().lastAutoProcessedWeekId == '9999-W99';
     }
 
-    // Everything else: denied.
+    match /settings/{docId} {
+      allow read: if true;
+      allow create: if (docId == 'meta' && v1LockStaysParked())
+        || (docId == 'customSports' && data().keys().hasOnly(['list']) && data().list is list);
+      allow update: if (docId == 'meta'
+          && (!changed().hasAny(['lastAutoProcessedWeekId']) || v1LockStaysParked())
+          && !changed().hasAny(['processing']))
+        || (docId == 'customSports' && data().keys().hasOnly(['list']) && data().list is list);
+      allow delete: if false;
+    }
+
+    // ── v1 fines archive: read-only forever (the fines game is over).
+    match /absences/{absenceId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /justifications/{justificationId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /flagged_workouts/{workoutId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ── Everything else: denied.
     match /{document=**} {
       allow read, write: if false;
     }

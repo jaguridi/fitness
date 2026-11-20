@@ -5,14 +5,33 @@
     <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
     <link rel="manifest" href="%BASE_URL%manifest.json" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#4f46e5" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#F2F4F7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0E1528" media="(prefers-color-scheme: dark)" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="FitFamily" />
     <link rel="apple-touch-icon" href="%BASE_URL%avatars/jose.png" />
-    <title>FitFamily - Tracker Familiar de Ejercicio</title>
+    <title>FitFamily</title>
+    <script>
+      // Tema antes del primer pintado (evita el destello). Mantener en sintonía
+      // con src/components/ui/theme.js.
+      (function () {
+        try {
+          var pref = localStorage.getItem('fitfamily_theme')
+          var root = document.documentElement
+          if (pref === 'light' || pref === 'dark') {
+            root.setAttribute('data-theme', pref)
+            var metas = document.querySelectorAll('meta[name="theme-color"]')
+            for (var i = 0; i < metas.length; i++) {
+              metas[i].setAttribute('content', pref === 'dark' ? '#0E1528' : '#F2F4F7')
+            }
+          }
+        } catch (e) {}
+      })()
+    </script>
   </head>
-  <body class="bg-gray-950 text-white">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
